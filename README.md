@@ -61,9 +61,10 @@ What still differs, because tldraw is a different tool:
 ## Get started
 
 1. Install and enable the [tldraw plugin](https://github.com/tldraw/obsidian-plugin) (1.33.0 or newer).
-2. Install Tracing Paper: download `main.js` and `manifest.json` from the
-   [latest release](../../releases/latest) into `<vault>/.obsidian/plugins/tracing-paper/`, or add
-   this repository in [BRAT](https://github.com/TfTHacker/obsidian42-brat).
+2. Install Tracing Paper from the
+   [Obsidian community directory](https://community.obsidian.md/plugins/tracing-paper). Or by hand:
+   download `main.js` and `manifest.json` from the [latest release](../../releases/latest) into
+   `<vault>/.obsidian/plugins/tracing-paper/`.
 3. Enable **Tracing Paper** under Settings → Community plugins.
 4. Open the command palette and run **Convert all Excalidraw drawings to tldraw**.
 
