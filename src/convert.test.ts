@@ -98,7 +98,8 @@ test('converts a messy scene, reports what it left behind, and round-trips the p
 	const cap = shapes.find((s) => s.type === 'text'), frame = shapes.find((s) => s.type === 'frame')
 	expect([cap.props.size, cap.props.scale, cap.props.font, cap.parentId]).toEqual(['m', 0.5, 'mono', frame.id])
 	expect([cap.x, cap.y, frame.props.name]).toEqual([30, 40, 'Board']) // position inside the frame is kept
-	expect(shapes.find((s) => s.type === 'draw').props.size).toBe('s')
+	const diamond = shapes.find((s) => s.props.geo === 'diamond'), arrow = shapes.find((s) => s.type === 'arrow')
+	expect([diamond.props.size, diamond.props.scale, arrow.props.size, arrow.props.scale, rect.props.size]).toEqual(['s', 2, 's', 2, 'm']) // strokeWidth 2: exact unless labelled
 	expect(records.filter((r) => r.typeName === 'asset')).toHaveLength(1)
 	expect(records.find((r) => r.typeName === 'instance_page_state').selectedShapeIds).toEqual([])
 })

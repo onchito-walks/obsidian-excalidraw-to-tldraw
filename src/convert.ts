@@ -119,11 +119,15 @@ export async function convertScene(
 				const sh = shapeOf(i)
 				if (!sh) return // a label: the importer folds it into its container
 				const props: Record<string, unknown> = {}
-				// Excalidraw's widths are 1, 2 and 4; tldraw's xl is a marker, so the widest stops at l.
-				if ('size' in sh.props && sh.type !== 'text') props.size = e.strokeWidth >= 3 ? 'l' : e.strokeWidth >= 1.5 ? 'm' : 's'
 				if (e.fill && sh.type === 'geo') props.fill = e.fill
 				if (sh.type === 'text') Object.assign(props, { size: 'm', scale: (e.fontSize || 20) / 24, font: FONTS[e.fontFamily] ?? 'draw' }) // m is 24px: exact size
 				const label = e.boundElements?.map((b: any) => byId.get(b.id)).find((b: any) => b?.type === 'text')
+				// Exact line weight: tldraw's s is 1px, and scale multiplies it. Scale also scales a label, so labelled shapes use the nearest preset.
+				if (sh.type === 'geo' || sh.type === 'line' || sh.type === 'arrow') {
+					const sw = Number.isFinite(e.strokeWidth) && e.strokeWidth > 0 ? e.strokeWidth : 1
+					if (label) props.size = sw >= 3 ? 'l' : sw >= 1.5 ? 'm' : 's'
+					else Object.assign(props, { size: 's', scale: sw })
+				}
 				if (label && 'font' in sh.props) {
 					props.font = FONTS[label.fontFamily] ?? 'draw'
 					if (sh.type === 'geo') props.verticalAlign = ({ top: 'start', bottom: 'end' } as any)[label.verticalAlign] ?? 'middle'
