@@ -29,23 +29,34 @@ Both drawings above are in [`demo/`](demo). Drop them in a vault and try it.
 ### On other people's drawings
 
 These are community libraries from [libraries.excalidraw.com](https://libraries.excalidraw.com),
-converted as they come (credits in [`demo/public/`](demo/public)):
+converted as they come (credits in [`demo/public/`](demo/public)). The wipe shows the original turning
+into its tldraw copy:
 
-![Community Excalidraw libraries before and after conversion](docs/demo.gif)
+![Five drawings wiping from Excalidraw to tldraw](docs/demo.gif)
 
 ## How close is it?
 
-Close, not identical. tldraw is a different drawing tool, and some things have no equivalent:
+Same layout, sizes, line weights, fills and outline colours. Every picture on this page is exported
+straight from Excalidraw and from tldraw at the same scale, with nothing retouched.
 
-- **One colour per shape.** Excalidraw lets a shape have one outline colour and another fill colour;
-  tldraw gives a shape a single colour from a fixed palette. White fills keep their outline colour
-  and solid dark fills stay solid; other fills take the fill's colour.
-- **Fonts.** Text keeps its size and position, in tldraw's own hand-drawn, sans or mono font.
-- **Filled outlines.** A closed line with a fill becomes an unfilled line.
-- **Line weights and dashes** map to tldraw's nearest preset.
+What Tracing Paper does to get there:
 
-Simple diagrams and handwriting come across nearly unchanged. Dense, heavily styled drawings such
-as the wireframe kit above keep their content and layout but lose some styling.
+- **Line weight** is carried over exactly, not rounded to tldraw's four presets.
+- **Text** keeps its size and stays on its original centre line.
+- **Outline and fill of different colours** become two stacked tldraw shapes, grouped so they move
+  as one, because a tldraw shape has a single colour.
+- **Filled outlines** drawn with the line tool stay filled.
+- **Right-angle arrows** stay right-angled, and **frames** stay frames.
+- **A label on a thin-lined shape** becomes text grouped with the shape, because in tldraw a
+  label's size sets its shape's line weight.
+
+What still differs, because tldraw is a different tool:
+
+- **Fonts.** tldraw has its own hand-drawn, sans and mono fonts; its handwriting is a little bolder.
+- **Colours** snap to tldraw's palette, so a custom shade becomes its nearest neighbour.
+- **Sketchiness.** Each app wobbles a hand-drawn line its own way, and freehand strokes taper a
+  little differently.
+- **Rounded corners** on rectangles are not carried over.
 
 ## Get started
 

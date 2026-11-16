@@ -73,7 +73,7 @@ test('converts a messy scene, reports what it left behind, and round-trips the p
 			el({ type: 'arrow', points: [[0, 0], [50, 0]], endArrowhead: 'arrow', endBinding: { elementId: 'box' } }),
 			el({ type: 'diamond', angle: 1 }),
 			el({ type: 'frame', id: 'fr', name: 'Board', x: 0, y: 0, width: 400, height: 300 }),
-			el({ type: 'text', id: 'cap', text: 'cap', fontSize: 12, fontFamily: 3, textAlign: 'left', frameId: 'fr', x: 30, y: 40 }),
+			el({ type: 'text', id: 'cap', text: 'cap', fontSize: 12, fontFamily: 3, textAlign: 'left', frameId: 'fr', x: 30, y: 40, width: 0 }),
 			el({ type: 'image', fileId: 'gone' }),
 			el({ type: 'image', fileId: 'pic' }),
 		],
@@ -110,17 +110,26 @@ test('white fills keep the outline colour and solid dark fills stay solid', asyn
 			el({ type: 'rectangle', id: 'w', strokeColor: '#e03131', backgroundColor: '#fff', link: 'https://example.com/a?b=1' }),
 			el({ type: 'ellipse', id: 'k', backgroundColor: 'black' }),
 			el({ type: 'diamond', id: 'p', backgroundColor: '#ffc9c9' }),
+			el({ type: 'ellipse', id: 'tint', strokeColor: '#1971c2', backgroundColor: '#a5d8ff', x: 500 }),
 			el({ type: 'line', id: 'tri', backgroundColor: 'black', points: [[0, 0], [40, 0], [20, 30], [0, 0]] }),
-			el({ type: 'line', id: 'open', backgroundColor: 'black', points: [[0, 0], [40, 0], [20, 30]] }),
+			el({ type: 'line', id: 'open', points: [[0, 0], [40, 0], [20, 30]] }),
+			el({ type: 'line', id: 'gap', backgroundColor: 'black', points: [[0, 0], [40, 0], [20, 30]] }), // ends apart: still filled
 		],
 	})
 	const shapes = load(file).filter((r) => r.typeName === 'shape')
-	const tri = shapes.find((r) => r.type === 'draw')
+	const tri = shapes.find((r) => r.type === 'draw' && r.props.segments.length === 3) // record order is by random id
+	expect(shapes.filter((r) => r.type === 'draw').map((r) => [r.props.isClosed, r.props.fill])).toEqual([[true, 'fill'], [true, 'fill']])
 	expect([tri.props.isClosed, tri.props.fill, tri.props.color, tri.props.segments.length, tri.x, tri.y]).toEqual([true, 'fill', 'black', 3, shapes.find((r) => r.type === 'line').x, shapes.find((r) => r.type === 'line').y])
-	const geo = Object.fromEntries(load(file).filter((r) => r.type === 'geo').map((r) => [r.props.geo, r.props]))
+	const geo = Object.fromEntries(load(file).filter((r) => r.type === 'geo' && r.props.color !== 'blue').map((r) => [r.props.geo, r.props]))
 	expect([geo.rectangle.fill, geo.rectangle.color, geo.rectangle.url]).toEqual(['semi', 'red', 'https://example.com/a?b=1'])
 	expect([geo.ellipse.fill, geo.ellipse.color, geo.ellipse.url]).toEqual(['fill', 'black', ''])
-	expect([geo.diamond.fill, geo.diamond.color]).toEqual(['solid', 'light-red'])
+	// Black outline, pink fill: tldraw has one colour per shape, so the fill goes underneath as a second shape.
+	const [under, over] = shapes.filter((r) => r.props.geo === 'diamond').sort((a, b) => (a.index < b.index ? -1 : 1))
+	expect([under.props.fill, under.props.color, over.props.fill, over.props.color]).toEqual(['solid', 'light-red', 'none', 'black'])
+	expect([under.x, under.y, under.parentId]).toEqual([over.x, over.y, over.parentId])
+	expect(shapes.find((r) => r.id === over.parentId).type).toBe('group')
+	// A fill that is the outline's own tint needs only one shape.
+	expect(shapes.filter((r) => r.props.color === 'blue').map((r) => r.props.fill)).toEqual(['solid'])
 })
 
 test('a lone member of a group moves with the drawing, and right-angle arrows become elbows', async () => {
@@ -128,7 +137,7 @@ test('a lone member of a group moves with the drawing, and right-angle arrows be
 		elements: [
 			el({ type: 'rectangle', id: 'a', x: 1000, y: 1000, groupIds: ['g'] }),
 			el({ type: 'ellipse', id: 'b', x: 1200, y: 1000, groupIds: ['g'] }),
-			el({ type: 'text', id: 't', text: 'x', fontSize: 20, fontFamily: 1, textAlign: 'left', x: 1100, y: 1100, groupIds: ['solo', 'g'] }),
+			el({ type: 'text', id: 't', text: 'x', fontSize: 20, fontFamily: 1, textAlign: 'left', x: 1100, y: 1100, groupIds: ['solo', 'g'], width: 0 }),
 			el({ type: 'arrow', id: 'bent', x: 1000, y: 1300, points: [[0, 0], [-50, 0], [-50, -80]] }),
 		],
 	})
@@ -137,6 +146,65 @@ test('a lone member of a group moves with the drawing, and right-angle arrows be
 	expect(t.parentId).toBe(a.parentId) // same group
 	expect([Math.round(t.x - a.x), Math.round(t.y - a.y)]).toEqual([100, 100])
 	expect(editorless.find((r) => r.type === 'arrow').props.kind).toBe('elbow')
+})
+
+test('line weights are exact, and a label that would force a heavy outline becomes grouped text', async () => {
+	const { file } = await convertScene(tl, {
+		elements: [
+			el({ type: 'rectangle', id: 'thin', strokeWidth: 1, boundElements: [{ id: 'lt', type: 'text' }] }),
+			el({ type: 'text', id: 'lt', text: 'thin', fontSize: 20, fontFamily: 1, textAlign: 'center', containerId: 'thin', width: 0 }),
+			el({ type: 'rectangle', id: 'bold', strokeWidth: 4, x: 300, boundElements: [{ id: 'lb', type: 'text' }] }),
+			el({ type: 'text', id: 'lb', text: 'bold', fontSize: 20, fontFamily: 1, textAlign: 'center', containerId: 'bold', width: 0 }),
+			el({ type: 'line', id: 'hair', strokeWidth: 1, roughness: 0, points: [[0, 0], [50, 0]] }),
+			el({ type: 'freedraw', id: 'ink', strokeWidth: 1, points: [[0, 0], [5, 5], [9, 3]] }),
+		],
+	})
+	const shapes = load(file).filter((r) => r.typeName === 'shape')
+	const px = (r: any) => ({ s: 2, m: 3.5, l: 5, xl: 10 } as any)[r.props.size] * r.props.scale
+	const [thin, bold] = shapes.filter((r) => r.type === 'geo').sort((a, b) => px(a) - px(b))
+	const text = shapes.find((r) => r.type === 'text')
+	expect([px(thin), thin.props.richText.content[0].content, text.parentId]).toEqual([1, undefined, thin.parentId])
+	expect(shapes.find((r) => r.id === thin.parentId).type).toBe('group')
+	expect(Math.abs(px(bold) - 4)).toBeLessThan(1) // label kept: nearest preset
+	expect(JSON.stringify(bold.props.richText)).toContain('bold')
+	const hair = shapes.find((r) => r.type === 'line')
+	expect([px(hair), hair.props.dash]).toEqual([1, 'solid'])
+	expect(px(shapes.find((r) => r.type === 'draw'))).toBeCloseTo(2.7)
+})
+
+test('a filled outline in a group of two stays in its group, in place', async () => {
+	const { file } = await convertScene(tl, {
+		elements: [
+			el({ type: 'ellipse', id: 'head', x: 1000, y: 1000, groupIds: ['g'] }),
+			el({ type: 'line', id: 'hat', x: 1010, y: 990, backgroundColor: '#4c6ef5', groupIds: ['g'], points: [[0, 0], [40, 0], [20, -30], [0, 0]] }),
+			el({ type: 'rectangle', id: 'far', x: 0, y: 0 }),
+		],
+	})
+	const shapes = load(file).filter((r) => r.typeName === 'shape')
+	const hat = shapes.find((r) => r.type === 'draw'), head = shapes.find((r) => r.props.geo === 'ellipse')
+	expect(hat.parentId).toBe(head.parentId)
+	expect(shapes.find((r) => r.id === hat.parentId).type).toBe('group')
+	expect([Math.round(hat.x - head.x), Math.round(hat.y - head.y)]).toEqual([10, -10])
+})
+
+const demos = ['demo/Flowchart', 'demo/Sketchnote', 'demo/public/Stick figures', 'demo/public/UML activity', 'demo/public/Wireframe kit']
+test.each(demos)('%s keeps its layout: every shape sits where its element was', async (name: string) => {
+	const { scene } = parseExcalidraw(readFileSync(join(__dirname, '..', name + '.excalidraw'), 'utf8'))
+	const { file } = await convertScene(tl, scene)
+	const shapes = load(file).filter((r) => r.typeName === 'shape')
+	const by = new Map(shapes.map((r) => [r.id, r]))
+	const page = (r: any): number[] => { const p = by.get(r.parentId); if (!p) return [r.x, r.y]; const q = page(p); return [q[0] + r.x, q[1] + r.y] }
+	const key = (x: number, y: number) => `${Math.round(x)},${Math.round(y)}`
+	// Rotated shapes pivot differently and labels fold into their shapes: compare the rest.
+	const src = scene.elements.filter((e: any) => !e.isDeleted && !e.angle && !e.containerId && e.type !== 'text')
+	const out = shapes.filter((r) => !r.rotation && r.type !== 'group' && r.type !== 'text')
+	const [ox, oy] = [Math.min(...out.map((r) => page(r)[0])), Math.min(...out.map((r) => page(r)[1]))]
+	const [sx, sy] = [Math.min(...src.map((e: any) => e.x)), Math.min(...src.map((e: any) => e.y))]
+	const want = new Set(src.map((e: any) => key(e.x - sx, e.y - sy)))
+	const got = new Set(out.map((r) => key(page(r)[0] - ox, page(r)[1] - oy)))
+	const near = (set: Set<string>, k: string) => { const [x, y] = k.split(',').map(Number); return [-1, 0, 1].some((a) => [-1, 0, 1].some((b) => set.has(`${x + a},${y + b}`))) }
+	expect([...got].filter((k) => !near(want, k))).toEqual([])
+	expect([...want].filter((k) => !near(got, k))).toEqual([])
 })
 
 test('an empty scene converts to nothing', async () => {
