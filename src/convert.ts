@@ -84,8 +84,18 @@ export async function convertScene(
 			// commonest fills need better: white keeps the outline colour, a solid dark fill stays solid.
 			const closed = e.type === 'line' && e.points?.length > 3 && backgroundColor !== 'transparent' && Math.hypot(e.points[0][0] - e.points.at(-1)[0], e.points[0][1] - e.points.at(-1)[1]) < 2
 			const fill = !GEO.has(e.type) && !closed ? '' : WHITE.has(backgroundColor as string) ? 'semi' : e.fillStyle === 'solid' && DARK.has(backgroundColor as string) ? 'fill' : closed ? 'solid' : ''
-			return { ...e, boundElements: e.boundElements ?? null, angle: e.angle ?? 0, strokeColor, backgroundColor: fill === 'semi' ? strokeColor : backgroundColor, fill }
+			// A multi-point arrow whose legs are all horizontal or vertical is an elbow arrow, not a curve.
+			const elbowed = e.elbowed || (e.type === 'arrow' && e.points.length > 2 && e.points.slice(1).every((p: number[], k: number) => Math.abs(p[0] - e.points[k][0]) < 1 || Math.abs(p[1] - e.points[k][1]) < 1))
+			return { ...e, elbowed, boundElements: e.boundElements ?? null, angle: e.angle ?? 0, strokeColor, backgroundColor: fill === 'semi' ? strokeColor : backgroundColor, fill }
 		})
+	// The importer groups by an element's innermost group and never moves the lone member of a group with
+	// the rest of the drawing: drop group ids that have a single member here, so such elements stay in place.
+	for (let again = true; again; ) {
+		const count = new Map<string, number>()
+		for (const e of elements) if (e.groupIds?.[0]) count.set(e.groupIds[0], (count.get(e.groupIds[0]) ?? 0) + 1)
+		again = false
+		for (const e of elements) if (e.groupIds?.[0] && count.get(e.groupIds[0]) === 1) (e.groupIds = e.groupIds.slice(1)), (again = true)
+	}
 
 	const container = document.createElement('div')
 	const editor = new tl.Editor({
@@ -122,11 +132,11 @@ export async function convertScene(
 				if (e.fill && sh.type === 'geo') props.fill = e.fill
 				if (sh.type === 'text') Object.assign(props, { size: 'm', scale: (e.fontSize || 20) / 24, font: FONTS[e.fontFamily] ?? 'draw' }) // m is 24px: exact size
 				const label = e.boundElements?.map((b: any) => byId.get(b.id)).find((b: any) => b?.type === 'text')
-				// Exact line weight: tldraw's s is 1px, and scale multiplies it. Scale also scales a label, so labelled shapes use the nearest preset.
+				// Exact line weight: tldraw's s draws 2px and scale multiplies it. Scale also sizes a label (18px at s),
+				// so a labelled shape is scaled for its text instead, which lands its stroke near 2px.
 				if (sh.type === 'geo' || sh.type === 'line' || sh.type === 'arrow') {
 					const sw = Number.isFinite(e.strokeWidth) && e.strokeWidth > 0 ? e.strokeWidth : 1
-					if (label) props.size = sw >= 3 ? 'l' : sw >= 1.5 ? 'm' : 's'
-					else Object.assign(props, { size: 's', scale: sw })
+					Object.assign(props, { size: 's', scale: label ? (label.fontSize || 20) / 18 : sw / 2 })
 				}
 				if (label && 'font' in sh.props) {
 					props.font = FONTS[label.fontFamily] ?? 'draw'

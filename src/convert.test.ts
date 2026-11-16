@@ -99,7 +99,7 @@ test('converts a messy scene, reports what it left behind, and round-trips the p
 	expect([cap.props.size, cap.props.scale, cap.props.font, cap.parentId]).toEqual(['m', 0.5, 'mono', frame.id])
 	expect([cap.x, cap.y, frame.props.name]).toEqual([30, 40, 'Board']) // position inside the frame is kept
 	const diamond = shapes.find((s) => s.props.geo === 'diamond'), arrow = shapes.find((s) => s.type === 'arrow')
-	expect([diamond.props.size, diamond.props.scale, arrow.props.size, arrow.props.scale, rect.props.size]).toEqual(['s', 2, 's', 2, 'm']) // strokeWidth 2: exact unless labelled
+	expect([diamond.props.size, diamond.props.scale, arrow.props.size, arrow.props.scale, rect.props.size]).toEqual(['s', 1, 's', 1, 's']) // strokeWidth 2 is tldraw's s
 	expect(records.filter((r) => r.typeName === 'asset')).toHaveLength(1)
 	expect(records.find((r) => r.typeName === 'instance_page_state').selectedShapeIds).toEqual([])
 })
@@ -121,6 +121,22 @@ test('white fills keep the outline colour and solid dark fills stay solid', asyn
 	expect([geo.rectangle.fill, geo.rectangle.color, geo.rectangle.url]).toEqual(['semi', 'red', 'https://example.com/a?b=1'])
 	expect([geo.ellipse.fill, geo.ellipse.color, geo.ellipse.url]).toEqual(['fill', 'black', ''])
 	expect([geo.diamond.fill, geo.diamond.color]).toEqual(['solid', 'light-red'])
+})
+
+test('a lone member of a group moves with the drawing, and right-angle arrows become elbows', async () => {
+	const { file } = await convertScene(tl, {
+		elements: [
+			el({ type: 'rectangle', id: 'a', x: 1000, y: 1000, groupIds: ['g'] }),
+			el({ type: 'ellipse', id: 'b', x: 1200, y: 1000, groupIds: ['g'] }),
+			el({ type: 'text', id: 't', text: 'x', fontSize: 20, fontFamily: 1, textAlign: 'left', x: 1100, y: 1100, groupIds: ['solo', 'g'] }),
+			el({ type: 'arrow', id: 'bent', x: 1000, y: 1300, points: [[0, 0], [-50, 0], [-50, -80]] }),
+		],
+	})
+	const editorless = load(file).filter((r) => r.typeName === 'shape')
+	const t = editorless.find((r) => r.type === 'text'), a = editorless.find((r) => r.props.geo === 'rectangle')
+	expect(t.parentId).toBe(a.parentId) // same group
+	expect([Math.round(t.x - a.x), Math.round(t.y - a.y)]).toEqual([100, 100])
+	expect(editorless.find((r) => r.type === 'arrow').props.kind).toBe('elbow')
 })
 
 test('an empty scene converts to nothing', async () => {
