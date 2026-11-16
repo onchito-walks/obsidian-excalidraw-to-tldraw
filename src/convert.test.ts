@@ -6,7 +6,7 @@ import * as tl from 'tldraw'
 import { createTLSchema, parseTldrawJsonFile } from 'tldraw'
 import { expect, test } from 'vitest'
 import { TLDATA_END, TLDATA_START, convertScene, snapColor, toTldrawMarkdown } from './convert'
-import { parseExcalidraw } from './parse'
+import { attachmentName, parseExcalidraw } from './parse'
 
 const el = (o: Record<string, unknown>) => ({
 	id: `el-${o.type}-${Math.random()}`,
@@ -216,6 +216,27 @@ test('a rounded filled outline stays curved', async () => {
 	expect(pts).toHaveLength(32) // 4 spans, 8 steps each
 	expect([pts[3].x, pts[3].y]).toEqual([15, -18.75]) // halfway along the first side: off the straight chord (20, -15)
 	expect([Math.round(pts.at(-1).x), Math.round(pts.at(-1).y)]).toEqual([0, 0])
+})
+
+test('a link that is not a web or mail address is dropped, not carried into the drawing', async () => {
+	const { file, converted } = await convertScene(tl, {
+		elements: [
+			el({ type: 'rectangle', id: 'bad', link: 'javascript:alert(1)' }),
+			el({ type: 'ellipse', id: 'vault', link: '[[Some note]]' }),
+			el({ type: 'diamond', id: 'good', link: 'https://example.com/' }),
+		],
+	})
+	expect(converted).toBe(3)
+	expect(load(file).filter((r) => r.type === 'geo').map((r) => r.props.url).sort()).toEqual(['', '', 'https://example.com/'])
+})
+
+test('an image id from a file cannot steer where its attachment is written', () => {
+	expect(attachmentName('notes/Sketch.tldraw.md', '../../../evil/x', 'png')).toBe('Sketch-evilx.png')
+	expect(attachmentName('Sketch.tldraw.md', 'abc123def456', 'png')).toBe('Sketch-abc123de.png')
+	expect(attachmentName('Sketch.tldraw.md', '///', 'png')).toBe('Sketch-image.png')
+	const md = obsidianMd('```json\n{"elements":[]}\n```', '## Embedded Files\n__proto__: [[x.png]]\nconstructor: [[y.png]]\n\n')
+	expect(Object.keys(parseExcalidraw(md).embedded)).toEqual(['__proto__', 'constructor'])
+	expect(({} as any).x).toBeUndefined()
 })
 
 test('an empty scene converts to nothing', async () => {

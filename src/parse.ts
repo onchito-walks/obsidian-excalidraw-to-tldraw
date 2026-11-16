@@ -16,7 +16,7 @@ export function parseExcalidraw(text: string): ParsedDrawing {
 		block[1] === 'json' ? block[2] : LZString.decompressFromBase64(block[2].replace(/[\r\n]/g, ''))
 	if (!json) throw new Error('could not decompress the drawing')
 
-	const embedded: Record<string, string> = {}
+	const embedded: Record<string, string> = Object.create(null) // keys come from the file: no inherited names
 	const section = text.match(/^#{1,2} Embedded Files\r?\n([\s\S]*?)(?=^%%|^#{1,2} )/im)
 	for (const line of section?.[1].split(/\r?\n/) ?? []) {
 		const m = line.match(/^(\S+): (.+)$/)
@@ -28,4 +28,9 @@ export function parseExcalidraw(text: string): ParsedDrawing {
 function withElements(scene: any) {
 	if (!Array.isArray(scene?.elements)) throw new Error('not an Excalidraw scene')
 	return scene
+}
+
+/** A vault file name for an image stored inside a drawing. The id comes from the file, so only safe characters are kept. */
+export function attachmentName(target: string, id: string, ext: string) {
+	return `${target.split('/').pop()!.replace(/\.tldraw\.md$/, '')}-${id.replace(/[^\w-]/g, '').slice(0, 8) || 'image'}.${ext}`
 }

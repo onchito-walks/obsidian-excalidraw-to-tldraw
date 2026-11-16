@@ -1,6 +1,6 @@
 import { Notice, Plugin, TFile, base64ToArrayBuffer } from 'obsidian'
 import { type Tldraw, convertScene, toTldrawMarkdown } from './convert'
-import { parseExcalidraw } from './parse'
+import { parseExcalidraw, attachmentName } from './parse'
 
 const MIN_TLDRAW_PLUGIN = '1.33.0' // first release that shares its tldraw with other plugins
 const VAULT = 'asset:vault:' // marks an image that lives in the vault until its asset is linked (tldraw only accepts a few URL schemes)
@@ -113,7 +113,7 @@ export default class TracingPaper extends Plugin {
 	/** Every image ends up as a vault file the converter can point at: Obsidian Excalidraw already links them. */
 	async loadEmbeddedImages(scene: any, embedded: Record<string, string>, sourcePath: string, target: string) {
 		const missing: string[] = []
-		scene.files ??= {}
+		scene.files = Object.assign(Object.create(null), scene.files) // ids come from the file: no inherited names
 		for (const [id, raw] of Object.entries(embedded)) {
 			const link = raw.match(/^\[\[([^\]|#]+)/)?.[1]
 			const dest = link && this.app.metadataCache.getFirstLinkpathDest(link, sourcePath)
@@ -130,7 +130,7 @@ export default class TracingPaper extends Plugin {
 			const inline = typeof f?.dataURL === 'string' && f.dataURL.match(/^data:(image\/[\w+.-]+);base64,(.*)$/s)
 			const ext = inline && Object.keys(MIME).find((k) => MIME[k] === inline[1])
 			if (!inline || !ext || !scene.elements.some((e: any) => e.fileId === id && !e.isDeleted)) continue
-			const name = `${target.split('/').pop()!.replace(/\.tldraw\.md$/, '')}-${id.slice(0, 8)}.${ext}`
+			const name = attachmentName(target, id, ext)
 			const path = await this.app.fileManager.getAvailablePathForAttachment(name, target)
 			await this.app.vault.createBinary(path, base64ToArrayBuffer(inline[2]))
 			f.dataURL = VAULT + path

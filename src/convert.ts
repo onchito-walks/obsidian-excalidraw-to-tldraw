@@ -108,7 +108,9 @@ export async function convertScene(
 			const fill = !GEO.has(e.type) && !closed ? '' : WHITE.has(backgroundColor as string) ? 'semi' : e.fillStyle === 'solid' && DARK.has(backgroundColor as string) ? 'fill' : ''
 			// A multi-point arrow whose legs are all horizontal or vertical is an elbow arrow, not a curve.
 			const elbowed = e.elbowed || (e.type === 'arrow' && e.points.length > 2 && e.points.slice(1).every((p: number[], k: number) => Math.abs(p[0] - e.points[k][0]) < 1 || Math.abs(p[1] - e.points[k][1]) < 1))
-			return { ...e, elbowed, closed, boundElements: e.boundElements ?? null, angle: e.angle ?? 0, strokeColor, backgroundColor: fill === 'semi' ? strokeColor : backgroundColor, fill }
+			// Only web and mail links survive: tldraw refuses any other, and would refuse the whole drawing with it.
+			const link = typeof e.link === 'string' && /^(https?:\/\/|mailto:)/i.test(e.link) ? e.link : null
+			return { ...e, link, elbowed, closed, boundElements: e.boundElements ?? null, angle: e.angle ?? 0, strokeColor, backgroundColor: fill === 'semi' ? strokeColor : backgroundColor, fill }
 		})
 	// The importer groups by an element's innermost group and never moves the lone member of a group with
 	// the rest of the drawing: drop group ids that have a single member here, so such elements stay in place.
