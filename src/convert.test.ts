@@ -109,8 +109,13 @@ test('white fills keep the outline colour and solid dark fills stay solid', asyn
 			el({ type: 'rectangle', id: 'w', strokeColor: '#e03131', backgroundColor: '#fff', link: 'https://example.com/a?b=1' }),
 			el({ type: 'ellipse', id: 'k', backgroundColor: 'black' }),
 			el({ type: 'diamond', id: 'p', backgroundColor: '#ffc9c9' }),
+			el({ type: 'line', id: 'tri', backgroundColor: 'black', points: [[0, 0], [40, 0], [20, 30], [0, 0]] }),
+			el({ type: 'line', id: 'open', backgroundColor: 'black', points: [[0, 0], [40, 0], [20, 30]] }),
 		],
 	})
+	const shapes = load(file).filter((r) => r.typeName === 'shape')
+	const tri = shapes.find((r) => r.type === 'draw')
+	expect([tri.props.isClosed, tri.props.fill, tri.props.color, tri.props.segments.length, tri.x, tri.y]).toEqual([true, 'fill', 'black', 3, shapes.find((r) => r.type === 'line').x, shapes.find((r) => r.type === 'line').y])
 	const geo = Object.fromEntries(load(file).filter((r) => r.type === 'geo').map((r) => [r.props.geo, r.props]))
 	expect([geo.rectangle.fill, geo.rectangle.color, geo.rectangle.url]).toEqual(['semi', 'red', 'https://example.com/a?b=1'])
 	expect([geo.ellipse.fill, geo.ellipse.color, geo.ellipse.url]).toEqual(['fill', 'black', ''])

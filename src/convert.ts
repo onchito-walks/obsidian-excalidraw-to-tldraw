@@ -43,6 +43,14 @@ const FONTS: Record<number, string> = { 1: 'draw', 2: 'sans', 3: 'mono', 5: 'dra
 const WHITE = new Set(['#ffffff', '#f8f9fa'])
 const DARK = new Set(KNOWN.flatMap((k, i) => (i < 50 && i % 5 > 2 ? ['#' + k] : [])).concat('#000000'))
 
+/** tldraw's colour for a snapped hex, as its importer maps them. */
+function colorName(hex: string) {
+	const i = KNOWN.indexOf(hex.slice(1))
+	if (i >= 50 || i < 0) return i === 50 ? 'white' : 'black'
+	const [light, dark] = [['grey', 'black'], ['light-red', 'red'], ['light-red', 'red'], ['light-violet', 'violet'], ['light-blue', 'blue'], ['light-blue', 'blue'], ['light-green', 'green'], ['light-green', 'green'], ['yellow', 'orange'], ['yellow', 'orange']][Math.floor(i / 5)]
+	return i % 5 < 3 ? light : dark
+}
+
 const SUPPORTED = new Set(['rectangle', 'ellipse', 'diamond', 'freedraw', 'line', 'arrow', 'text', 'image'])
 
 /**
@@ -74,7 +82,8 @@ export async function convertScene(
 			const backgroundColor = snapColor(e.backgroundColor)
 			// The importer gives a filled shape one colour, the fill's, shown as a pale tint. Excalidraw's two
 			// commonest fills need better: white keeps the outline colour, a solid dark fill stays solid.
-			const fill = !GEO.has(e.type) ? '' : WHITE.has(backgroundColor as string) ? 'semi' : e.fillStyle === 'solid' && DARK.has(backgroundColor as string) ? 'fill' : ''
+			const closed = e.type === 'line' && e.points?.length > 3 && backgroundColor !== 'transparent' && Math.hypot(e.points[0][0] - e.points.at(-1)[0], e.points[0][1] - e.points.at(-1)[1]) < 2
+			const fill = !GEO.has(e.type) && !closed ? '' : WHITE.has(backgroundColor as string) ? 'semi' : e.fillStyle === 'solid' && DARK.has(backgroundColor as string) ? 'fill' : closed ? 'solid' : ''
 			return { ...e, boundElements: e.boundElements ?? null, angle: e.angle ?? 0, strokeColor, backgroundColor: fill === 'semi' ? strokeColor : backgroundColor, fill }
 		})
 
@@ -112,7 +121,7 @@ export async function convertScene(
 				const props: Record<string, unknown> = {}
 				// Excalidraw's widths are 1, 2 and 4; tldraw's xl is a marker, so the widest stops at l.
 				if ('size' in sh.props && sh.type !== 'text') props.size = e.strokeWidth >= 3 ? 'l' : e.strokeWidth >= 1.5 ? 'm' : 's'
-				if (e.fill) props.fill = e.fill
+				if (e.fill && sh.type === 'geo') props.fill = e.fill
 				if (sh.type === 'text') Object.assign(props, { size: 'm', scale: (e.fontSize || 20) / 24, font: FONTS[e.fontFamily] ?? 'draw' }) // m is 24px: exact size
 				const label = e.boundElements?.map((b: any) => byId.get(b.id)).find((b: any) => b?.type === 'text')
 				if (label && 'font' in sh.props) {
@@ -122,6 +131,23 @@ export async function convertScene(
 				if (Object.keys(props).length) fixes.push({ id: sh.id, type: sh.type, x: sh.x, y: sh.y, props })
 			})
 			editor.updateShapes(fixes)
+
+			// A tldraw line cannot be filled: a closed, filled outline becomes a closed straight-edged draw shape.
+			elements.forEach((e, i) => {
+				const sh = shapeOf(i)
+				if (sh?.type !== 'line' || !e.fill) return
+				const pts = e.points.map(([x, y]: number[]) => ({ x, y, z: 0.5 }))
+				const { x, y, rotation, parentId, index, opacity, isLocked } = sh
+				editor.deleteShapes([sh.id])
+				editor.createShape({
+					id: sh.id, type: 'draw', x, y, rotation, parentId, index, opacity, isLocked,
+					props: {
+						segments: pts.slice(1).map((p: any, k: number) => ({ type: 'straight', path: tl.b64Vecs.encodePoints([pts[k], p]) })),
+						isClosed: true, isComplete: true, fill: e.fill, dash: sh.props.dash, size: sh.props.size,
+						color: e.fill === 'semi' ? sh.props.color : colorName(e.backgroundColor),
+					},
+				} as any)
+			})
 			// Rescaling text nudges it; put it back where the importer placed it.
 			editor.updateShapes(fixes.filter((f) => f.type === 'text').map((f) => ({ id: f.id, type: 'text', x: f.x, y: f.y })))
 
