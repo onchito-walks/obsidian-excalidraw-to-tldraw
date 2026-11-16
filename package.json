@@ -1,7 +1,6 @@
 {
   "name": "obsidian-excalidraw-to-tldraw",
-  "version": "0.1.0",
-  "private": true,
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "build": "tsc --noEmit && node esbuild.config.mjs",
@@ -30,5 +29,6 @@
     "wdio-obsidian-reporter": "^3.5.0",
     "wdio-obsidian-service": "^3.5.0",
     "webdriverio": "^9.32.0"
-  }
+  },
+  "license": "MIT"
 }

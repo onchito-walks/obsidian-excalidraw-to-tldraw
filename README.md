@@ -3,9 +3,22 @@
 An Obsidian plugin that converts Excalidraw drawings into drawings for the
 [tldraw plugin](https://github.com/tldraw/obsidian-plugin).
 
-It does not translate shapes itself. It runs tldraw's own Excalidraw importer (the code behind
-pasting Excalidraw content into tldraw) on a headless editor and saves the result in the tldraw
-plugin's file format, so the output is exactly what tldraw would have written.
+It does not translate shapes itself, and it does not ship its own copy of tldraw. It borrows the
+tldraw that the tldraw plugin already has loaded, runs tldraw's own Excalidraw importer (the code
+behind pasting Excalidraw content into tldraw) on a headless editor, and saves the result in the
+tldraw plugin's file format. The output is exactly what your installed tldraw would have written,
+so it opens in it.
+
+![A converted drawing open in the tldraw plugin](docs/screenshot.png)
+
+## Install
+
+Requires the [tldraw plugin](https://github.com/tldraw/obsidian-plugin) 1.33.0 or newer, installed
+and enabled.
+
+Download `main.js` and `manifest.json` from the [latest release](../../releases/latest) into
+`<vault>/.obsidian/plugins/excalidraw-to-tldraw/`, then enable **Excalidraw to tldraw** under
+Settings → Community plugins. Or install it with [BRAT](https://github.com/TfTHacker/obsidian42-brat).
 
 ## Use
 
@@ -19,8 +32,6 @@ Command palette:
 deleted, an existing target is never overwritten (so re-running is safe), and empty drawings are
 skipped. Each run writes `Excalidraw to tldraw report.md` in the vault root: one row per drawing
 with what was converted and what was left behind.
-
-Requires the tldraw plugin 1.35.1 or newer to open the results.
 
 ## What converts
 
@@ -45,10 +56,12 @@ Excalidraw originals.
     npm run e2e     # real Obsidian + the real tldraw plugin open the converted files (needs xvfb)
     npm run build   # main.js
 
-Install by copying `main.js` and `manifest.json` to `<vault>/.obsidian/plugins/excalidraw-to-tldraw/`.
+## Licence and credits
 
-## Licence note
+MIT, see [LICENSE](LICENSE). This project is not affiliated with tldraw or Excalidraw.
 
-`main.js` bundles the tldraw SDK, which is under the [tldraw licence](https://github.com/tldraw/tldraw/blob/main/LICENSE.md),
-not an open-source one. The build is for personal use; do not redistribute it. The bundle is not
-committed.
+- The conversion itself is done by [tldraw](https://github.com/tldraw/tldraw)'s Excalidraw importer,
+  called at run time through the tldraw plugin. No tldraw code is included in this repository or
+  its releases; tldraw is a development dependency for the tests only, under its own licence.
+- The file format written is that of the [tldraw Obsidian plugin](https://github.com/tldraw/obsidian-plugin) (Apache-2.0).
+- The release bundles [lz-string](https://github.com/pieroxy/lz-string) (MIT) to read compressed Excalidraw files.
