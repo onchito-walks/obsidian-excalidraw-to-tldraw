@@ -52,7 +52,7 @@ export default class TracingPaper extends Plugin {
 		}
 		const installed: string = tldrawPlugin.manifest.version
 		const tldrawVersion: string =
-			(globalThis as any).__TLDRAW_LIBRARY_VERSIONS__?.versions?.find((v: any) => v.name === 'tldraw')?.version ?? 'unknown'
+			(window as any).__TLDRAW_LIBRARY_VERSIONS__?.versions?.find((v: any) => v.name === 'tldraw')?.version ?? 'unknown'
 		const rows: string[] = []
 		let made = 0
 		const progress = new Notice('', 0)
@@ -76,9 +76,10 @@ export default class TracingPaper extends Plugin {
 				for (const asset of tldrawFile.records as any[]) {
 					const linked = asset.typeName === 'asset' && asset.props.src?.startsWith(VAULT) && asset.props.src.slice(VAULT.length)
 					if (!linked) continue
+					const image = this.app.vault.getAbstractFileByPath(linked)
+					if (!(image instanceof TFile)) continue
 					const id = crypto.randomUUID()
 					asset.props.src = `asset:obsidian.blockref.${id}`
-					const image = this.app.vault.getAbstractFileByPath(linked) as TFile
 					assetLinks.push(`${this.app.fileManager.generateMarkdownLink(image, target)}\n^${id}`)
 				}
 				await this.app.vault.create(

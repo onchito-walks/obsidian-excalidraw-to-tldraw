@@ -255,7 +255,7 @@ export async function convertScene(
 					const top = (k: any): string => (String(k.parentId).startsWith('shape:') ? top(editor.getShape(k.parentId)) : k.id)
 					editor.reparentShapes([...new Set(kids.map(top))] as any, id)
 				}
-			} else for (const _ of frames) skip('frame')
+			} else frames.forEach(() => skip('frame'))
 			const strokes = editor.getCurrentPageShapes().filter((s) => s.type === 'draw')
 			// The importer leaves strokes flagged as still being drawn.
 			editor.updateShapes(strokes.map((s) => ({ id: s.id, type: 'draw', props: { isComplete: true } })))
