@@ -5,13 +5,13 @@ const REPORT = 'Excalidraw to tldraw report.md'
 /** The only proof that counts: real Obsidian, the real tldraw plugin, opening what we wrote. */
 describe('Excalidraw to tldraw', () => {
 	before(async () => {
-		await browser.reloadObsidian({ plugins: ['tldraw', 'excalidraw-to-tldraw'] })
+		await browser.reloadObsidian({ plugins: ['tldraw', 'tracing-paper'] })
 	})
 
 	async function convertAll() {
 		return browser.executeObsidian(async ({ app }, report) => {
 			await app.vault.adapter.remove(report).catch(() => {})
-			;(app as any).commands.executeCommandById('excalidraw-to-tldraw:convert-all')
+			;(app as any).commands.executeCommandById('tracing-paper:convert-all')
 			const deadline = Date.now() + 60_000
 			while (Date.now() < deadline && !(await app.vault.adapter.exists(report))) await sleep(200)
 			return {

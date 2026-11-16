@@ -14,7 +14,7 @@ const MIME: Record<string, string> = {
 	svg: 'image/svg+xml',
 }
 
-export default class ExcalidrawToTldraw extends Plugin {
+export default class TracingPaper extends Plugin {
 	onload() {
 		this.addCommand({
 			id: 'convert-all',
@@ -47,7 +47,7 @@ export default class ExcalidrawToTldraw extends Plugin {
 		const tldrawPlugin = (this.app as any).plugins?.plugins?.tldraw
 		const tl: Tldraw | undefined = tldrawPlugin?.instance?.packages?.tldraw
 		if (!tl?.putExcalidrawContent) {
-			new Notice(`Excalidraw to tldraw needs the tldraw plugin, ${MIN_TLDRAW_PLUGIN} or newer, installed and enabled.`, 10000)
+			new Notice(`Tracing Paper needs the tldraw plugin, ${MIN_TLDRAW_PLUGIN} or newer, installed and enabled.`, 10000)
 			return
 		}
 		const installed: string = tldrawPlugin.manifest.version
@@ -91,7 +91,7 @@ export default class ExcalidrawToTldraw extends Plugin {
 					`| [[${file.path}]] | ${converted} shapes${left.length ? `; left behind: ${left.join(', ')}` : ''} | [[${target}]] |`
 				)
 			} catch (e) {
-				console.error('excalidraw-to-tldraw', file.path, e)
+				console.error('tracing-paper', file.path, e)
 				rows.push(`| [[${file.path}]] | FAILED: ${String((e as Error)?.message ?? e).replace(/\|/g, '/')} | |`)
 			}
 		}

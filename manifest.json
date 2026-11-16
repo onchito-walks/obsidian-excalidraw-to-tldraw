@@ -1,9 +1,9 @@
 {
-	"id": "excalidraw-to-tldraw",
-	"name": "Excalidraw to tldraw",
-	"version": "1.0.0",
+	"id": "tracing-paper",
+	"name": "Tracing Paper",
+	"version": "1.1.0",
 	"minAppVersion": "1.10.0",
-	"description": "Convert Excalidraw drawings to tldraw drawings, using the tldraw plugin's own Excalidraw importer.",
+	"description": "Convert Excalidraw drawings to tldraw drawings, in one command, using the tldraw plugin's own importer.",
 	"author": "onchito-walks",
 	"isDesktopOnly": false,
 	"authorUrl": "https://github.com/onchito-walks"

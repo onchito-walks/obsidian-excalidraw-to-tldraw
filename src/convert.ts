@@ -80,7 +80,8 @@ export async function convertScene(
 		textOptions: { tipTapConfig: { extensions: tl.tipTapDefaultExtensions }, addFontsFromNode: tl.defaultAddFontsFromNode },
 	})
 	try {
-		editor.updateViewportScreenBounds(new tl.Box(0, 0, 1600, 900))
+		// Smaller than a typical window, so the saved zoom leaves room for tldraw's side panel and toolbar.
+		editor.updateViewportScreenBounds(new tl.Box(0, 0, 1280, 720))
 		if (elements.length) {
 			await tl.putExcalidrawContent(editor, { elements, files })
 			const strokes = editor.getCurrentPageShapes().filter((s) => s.type === 'draw')
