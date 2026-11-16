@@ -1,14 +1,7 @@
-import {
-	Box,
-	Editor,
-	TldrawFile,
-	createTLStore,
-	defaultAddFontsFromNode,
-	defaultBindingUtils,
-	defaultShapeUtils,
-	putExcalidrawContent,
-	tipTapDefaultExtensions,
-} from 'tldraw'
+import type { TldrawFile } from 'tldraw'
+
+/** The tldraw module. The plugin takes it from the installed tldraw plugin instead of bundling its own. */
+export type Tldraw = typeof import('tldraw')
 
 export interface Conversion {
 	file: TldrawFile
@@ -50,10 +43,10 @@ const SUPPORTED = new Set(['rectangle', 'ellipse', 'diamond', 'freedraw', 'line'
  * Converts an Excalidraw scene with tldraw's own importer (the code behind pasting Excalidraw
  * into tldraw), run on a headless editor, so the records are exactly what tldraw itself writes.
  */
-export async function convertScene(scene: {
-	elements: any[]
-	files?: Record<string, any>
-}): Promise<Conversion> {
+export async function convertScene(
+	tl: Tldraw,
+	scene: { elements: any[]; files?: Record<string, any> }
+): Promise<Conversion> {
 	const skipped: Record<string, number> = {}
 	const skip = (why: string) => void (skipped[why] = (skipped[why] ?? 0) + 1)
 	const files = scene.files ?? {}
@@ -78,18 +71,18 @@ export async function convertScene(scene: {
 		}))
 
 	const container = document.createElement('div')
-	const editor = new Editor({
-		store: createTLStore({ shapeUtils: defaultShapeUtils, bindingUtils: defaultBindingUtils }),
-		shapeUtils: defaultShapeUtils,
-		bindingUtils: defaultBindingUtils,
+	const editor = new tl.Editor({
+		store: tl.createTLStore({ shapeUtils: tl.defaultShapeUtils, bindingUtils: tl.defaultBindingUtils }),
+		shapeUtils: tl.defaultShapeUtils,
+		bindingUtils: tl.defaultBindingUtils,
 		tools: [],
 		getContainer: () => container,
-		textOptions: { tipTapConfig: { extensions: tipTapDefaultExtensions }, addFontsFromNode: defaultAddFontsFromNode },
+		textOptions: { tipTapConfig: { extensions: tl.tipTapDefaultExtensions }, addFontsFromNode: tl.defaultAddFontsFromNode },
 	})
 	try {
-		editor.updateViewportScreenBounds(new Box(0, 0, 1600, 900))
+		editor.updateViewportScreenBounds(new tl.Box(0, 0, 1600, 900))
 		if (elements.length) {
-			await putExcalidrawContent(editor, { elements, files })
+			await tl.putExcalidrawContent(editor, { elements, files })
 			const strokes = editor.getCurrentPageShapes().filter((s) => s.type === 'draw')
 			// The importer leaves strokes flagged as still being drawn.
 			editor.updateShapes(strokes.map((s) => ({ id: s.id, type: 'draw', props: { isComplete: true } })))

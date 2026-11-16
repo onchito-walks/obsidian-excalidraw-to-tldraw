@@ -1,9 +1,8 @@
 import { Notice, Plugin, TFile, base64ToArrayBuffer } from 'obsidian'
-import { convertScene, toTldrawMarkdown } from './convert'
+import { type Tldraw, convertScene, toTldrawMarkdown } from './convert'
 import { parseExcalidraw } from './parse'
 
-declare const TLDRAW_VERSION: string // the bundled tldraw, set by esbuild
-const TLDRAW_PLUGIN_VERSION = '1.35.1' // the tldraw plugin release that ships TLDRAW_VERSION
+const MIN_TLDRAW_PLUGIN = '1.33.0' // first release that shares its tldraw with other plugins
 const VAULT = 'asset:vault:' // marks an image that lives in the vault until its asset is linked (tldraw only accepts a few URL schemes)
 const REPORT = 'Excalidraw to tldraw report.md'
 const MIME: Record<string, string> = {
@@ -44,7 +43,16 @@ export default class ExcalidrawToTldraw extends Plugin {
 
 	/** Originals are never touched; an existing target is never overwritten. */
 	async run(files: TFile[]) {
-		const installed: string | undefined = (this.app as any).plugins?.plugins?.tldraw?.manifest?.version
+		// Conversion runs on the tldraw plugin's own copy of tldraw: same importer, same schema as the plugin that opens the result.
+		const tldrawPlugin = (this.app as any).plugins?.plugins?.tldraw
+		const tl: Tldraw | undefined = tldrawPlugin?.instance?.packages?.tldraw
+		if (!tl?.putExcalidrawContent) {
+			new Notice(`Excalidraw to tldraw needs the tldraw plugin, ${MIN_TLDRAW_PLUGIN} or newer, installed and enabled.`, 10000)
+			return
+		}
+		const installed: string = tldrawPlugin.manifest.version
+		const tldrawVersion: string =
+			(globalThis as any).__TLDRAW_LIBRARY_VERSIONS__?.versions?.find((v: any) => v.name === 'tldraw')?.version ?? 'unknown'
 		const rows: string[] = []
 		let made = 0
 		const progress = new Notice('', 0)
@@ -58,7 +66,7 @@ export default class ExcalidrawToTldraw extends Plugin {
 				}
 				const { scene, embedded } = parseExcalidraw(await this.app.vault.read(file))
 				const missing = await this.loadEmbeddedImages(scene, embedded, file.path, target)
-				const { file: tldrawFile, converted, skipped } = await convertScene(scene)
+				const { file: tldrawFile, converted, skipped } = await convertScene(tl, scene)
 				if (!converted && !Object.keys(skipped).length) {
 					rows.push(`| [[${file.path}]] | empty drawing, nothing to convert | |`)
 					continue
@@ -75,7 +83,7 @@ export default class ExcalidrawToTldraw extends Plugin {
 				}
 				await this.app.vault.create(
 					target,
-					toTldrawMarkdown(tldrawFile, installed ?? TLDRAW_PLUGIN_VERSION, TLDRAW_VERSION, assetLinks)
+					toTldrawMarkdown(tldrawFile, installed, tldrawVersion, assetLinks)
 				)
 				made++
 				const left = [...Object.entries(skipped).map(([why, n]) => `${n} × ${why}`), ...missing]
@@ -89,15 +97,8 @@ export default class ExcalidrawToTldraw extends Plugin {
 		}
 		progress.hide()
 
-		const notes = [
-			!installed && '> [!warning] The tldraw plugin is not installed or not enabled; the new files open as plain markdown until it is.',
-			installed &&
-				installed.localeCompare(TLDRAW_PLUGIN_VERSION, undefined, { numeric: true }) < 0 &&
-				`> [!warning] tldraw plugin ${installed} is older than ${TLDRAW_PLUGIN_VERSION}; update it if the new drawings fail to open.`,
-		].filter(Boolean)
 		const report = [
 			`Converted ${made} of ${files.length} Excalidraw drawings. The originals were not changed.`,
-			...notes,
 			'',
 			'| Excalidraw | Result | tldraw |',
 			'|---|---|---|',

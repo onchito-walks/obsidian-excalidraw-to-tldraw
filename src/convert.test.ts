@@ -2,6 +2,7 @@
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import LZString from 'lz-string'
+import * as tl from 'tldraw'
 import { createTLSchema, parseTldrawJsonFile } from 'tldraw'
 import { expect, test } from 'vitest'
 import { TLDATA_END, TLDATA_START, convertScene, snapColor, toTldrawMarkdown } from './convert'
@@ -53,7 +54,7 @@ test('snaps custom colours to the nearest colour tldraw knows', () => {
 const fixtures = join(__dirname, '../node_modules/tldraw/src/lib/utils/excalidraw/excalidraw-test-fixtures')
 test.each(readdirSync(fixtures))('tldraw loads its own fixture %s after conversion', async (name: string) => {
 	const scene = JSON.parse(readFileSync(join(fixtures, name), 'utf8'))
-	const { file, converted, skipped } = await convertScene(scene)
+	const { file, converted, skipped } = await convertScene(tl, scene)
 	expect(skipped).toEqual({})
 	expect(converted).toBeGreaterThan(0)
 	expect(load(file).filter((r) => r.typeName === 'shape').length).toBeGreaterThanOrEqual(converted)
@@ -61,7 +62,7 @@ test.each(readdirSync(fixtures))('tldraw loads its own fixture %s after conversi
 
 test('converts a messy scene, reports what it left behind, and round-trips the plugin markdown', async () => {
 	const box = el({ type: 'rectangle', id: 'box', strokeColor: '#ff0000', boundElements: [{ type: 'text', id: 'label' }] })
-	const { file, converted, skipped } = await convertScene({
+	const { file, converted, skipped } = await convertScene(tl, {
 		elements: [
 			box,
 			el({ type: 'text', id: 'label', containerId: 'box', text: 'hi', fontSize: 20, fontFamily: 1, textAlign: 'center' }),
@@ -97,6 +98,6 @@ test('converts a messy scene, reports what it left behind, and round-trips the p
 })
 
 test('an empty scene converts to nothing', async () => {
-	const { converted, skipped } = await convertScene({ elements: [el({ type: 'text', isDeleted: true })] })
+	const { converted, skipped } = await convertScene(tl, { elements: [el({ type: 'text', isDeleted: true })] })
 	expect([converted, skipped]).toEqual([0, {}])
 })
