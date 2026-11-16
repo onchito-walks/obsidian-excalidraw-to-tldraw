@@ -49,6 +49,7 @@ test('snaps custom colours to the nearest colour tldraw knows', () => {
 	expect(snapColor('#1e1e1e')).toBe('#343a40') // dark grey: tldraw maps it to black
 	expect(snapColor('#00F')).toBe('#1971c2')
 	expect(snapColor('transparent')).toBe('transparent')
+	expect(snapColor('white')).toBe('#ffffff')
 })
 
 const fixtures = join(__dirname, '../node_modules/tldraw/src/lib/utils/excalidraw/excalidraw-test-fixtures')
@@ -71,14 +72,15 @@ test('converts a messy scene, reports what it left behind, and round-trips the p
 			el({ type: 'freedraw', points: [] }),
 			el({ type: 'arrow', points: [[0, 0], [50, 0]], endArrowhead: 'arrow', endBinding: { elementId: 'box' } }),
 			el({ type: 'diamond', angle: 1 }),
-			el({ type: 'frame' }),
+			el({ type: 'frame', id: 'fr', name: 'Board', x: 0, y: 0, width: 400, height: 300 }),
+			el({ type: 'text', id: 'cap', text: 'cap', fontSize: 12, fontFamily: 3, textAlign: 'left', frameId: 'fr', x: 30, y: 40 }),
 			el({ type: 'image', fileId: 'gone' }),
 			el({ type: 'image', fileId: 'pic' }),
 		],
 		files: { pic: { mimeType: 'image/png', dataURL: 'data:image/png;base64,iVBORw0KGgo=' } },
 	})
-	expect(skipped).toEqual({ frame: 1, 'image (source not found)': 1, 'freedraw (no points)': 1 })
-	expect(converted).toBe(5) // rectangle+label, freedraw, arrow, diamond, image
+	expect(skipped).toEqual({ 'image (source not found)': 1, 'freedraw (no points)': 1 })
+	expect(converted).toBe(7) // rectangle+label, freedraw, arrow, diamond, image, frame, caption
 
 	const md = toTldrawMarkdown(file, '1.35.1', '5.6.0')
 	expect(md.startsWith('---\ntldraw-file: true\n---\n')).toBe(true)
@@ -87,14 +89,32 @@ test('converts a messy scene, reports what it left behind, and round-trips the p
 
 	const records = load(data.raw)
 	const shapes = records.filter((r) => r.typeName === 'shape')
-	expect(shapes.map((s) => s.type).sort()).toEqual(['arrow', 'draw', 'geo', 'geo', 'image'])
+	expect(shapes.map((s) => s.type).sort()).toEqual(['arrow', 'draw', 'frame', 'geo', 'geo', 'image', 'text'])
 	const rect = shapes.find((s) => s.props.geo === 'rectangle')
 	expect(rect.props.color).toBe('red')
 	expect(JSON.stringify(rect.props.richText)).toContain('hi')
 	expect(shapes.find((s) => s.props.geo === 'diamond').rotation).toBeCloseTo(1)
 	expect(records.filter((r) => r.typeName === 'binding')).toHaveLength(1)
+	const cap = shapes.find((s) => s.type === 'text'), frame = shapes.find((s) => s.type === 'frame')
+	expect([cap.props.size, cap.props.scale, cap.props.font, cap.parentId]).toEqual(['m', 0.5, 'mono', frame.id])
+	expect([cap.x, cap.y, frame.props.name]).toEqual([30, 40, 'Board']) // position inside the frame is kept
+	expect(shapes.find((s) => s.type === 'draw').props.size).toBe('s')
 	expect(records.filter((r) => r.typeName === 'asset')).toHaveLength(1)
 	expect(records.find((r) => r.typeName === 'instance_page_state').selectedShapeIds).toEqual([])
+})
+
+test('white fills keep the outline colour and solid dark fills stay solid', async () => {
+	const { file } = await convertScene(tl, {
+		elements: [
+			el({ type: 'rectangle', id: 'w', strokeColor: '#e03131', backgroundColor: '#fff', link: 'https://example.com/a?b=1' }),
+			el({ type: 'ellipse', id: 'k', backgroundColor: 'black' }),
+			el({ type: 'diamond', id: 'p', backgroundColor: '#ffc9c9' }),
+		],
+	})
+	const geo = Object.fromEntries(load(file).filter((r) => r.type === 'geo').map((r) => [r.props.geo, r.props]))
+	expect([geo.rectangle.fill, geo.rectangle.color, geo.rectangle.url]).toEqual(['semi', 'red', 'https://example.com/a?b=1'])
+	expect([geo.ellipse.fill, geo.ellipse.color, geo.ellipse.url]).toEqual(['fill', 'black', ''])
+	expect([geo.diamond.fill, geo.diamond.color]).toEqual(['solid', 'light-red'])
 })
 
 test('an empty scene converts to nothing', async () => {

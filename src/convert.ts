@@ -23,7 +23,7 @@ const rgb = (hex: string) => [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 
 /** Snaps any hex colour to the nearest one the importer knows, so custom colours keep their hue. */
 export function snapColor(color: unknown): unknown {
 	if (typeof color !== 'string') return color
-	let hex = color.replace('#', '').toLowerCase()
+	let hex = ({ black: '000000', white: 'ffffff' } as Record<string, string>)[color.toLowerCase()] ?? color.replace('#', '').toLowerCase()
 	if (/^[0-9a-f]{3}$/.test(hex)) hex = hex.replace(/./g, '$&$&')
 	if (!/^[0-9a-f]{6}/.test(hex)) return color // 'transparent', named colours: importer decides
 	const [r, g, b] = rgb(hex)
@@ -36,6 +36,12 @@ export function snapColor(color: unknown): unknown {
 	}
 	return '#' + best
 }
+
+const GEO = new Set(['rectangle', 'ellipse', 'diamond'])
+// Excalidraw font ids: Virgil, Helvetica, Cascadia, (4 unused), Excalifont, Nunito, Lilita One, Comic Shanns.
+const FONTS: Record<number, string> = { 1: 'draw', 2: 'sans', 3: 'mono', 5: 'draw', 6: 'sans', 7: 'sans', 8: 'mono' }
+const WHITE = new Set(['#ffffff', '#f8f9fa'])
+const DARK = new Set(KNOWN.flatMap((k, i) => (i < 50 && i % 5 > 2 ? ['#' + k] : [])).concat('#000000'))
 
 const SUPPORTED = new Set(['rectangle', 'ellipse', 'diamond', 'freedraw', 'line', 'arrow', 'text', 'image'])
 
@@ -51,10 +57,11 @@ export async function convertScene(
 	const skip = (why: string) => void (skipped[why] = (skipped[why] ?? 0) + 1)
 	const files = scene.files ?? {}
 
+	const frames = scene.elements.filter((e) => e.type === 'frame' && !e.isDeleted)
 	// The importer trusts its input: drop what would crash it or silently vanish, and say so.
 	const elements = scene.elements
 		.filter((e) => {
-			if (e.isDeleted) return false
+			if (e.isDeleted || e.type === 'frame') return false
 			if (!SUPPORTED.has(e.type)) return skip(e.type), false
 			if (e.type === 'image' && !files[e.fileId]?.dataURL) return skip('image (source not found)'), false
 			const minPoints = e.type === 'freedraw' ? 1 : 2
@@ -62,13 +69,14 @@ export async function convertScene(
 				return skip(`${e.type} (no points)`), false
 			return true
 		})
-		.map((e) => ({
-			...e,
-			boundElements: e.boundElements ?? null,
-			angle: e.angle ?? 0,
-			strokeColor: snapColor(e.strokeColor),
-			backgroundColor: snapColor(e.backgroundColor),
-		}))
+		.map((e) => {
+			const strokeColor = snapColor(e.strokeColor)
+			const backgroundColor = snapColor(e.backgroundColor)
+			// The importer gives a filled shape one colour, the fill's, shown as a pale tint. Excalidraw's two
+			// commonest fills need better: white keeps the outline colour, a solid dark fill stays solid.
+			const fill = !GEO.has(e.type) ? '' : WHITE.has(backgroundColor as string) ? 'semi' : e.fillStyle === 'solid' && DARK.has(backgroundColor as string) ? 'fill' : ''
+			return { ...e, boundElements: e.boundElements ?? null, angle: e.angle ?? 0, strokeColor, backgroundColor: fill === 'semi' ? strokeColor : backgroundColor, fill }
+		})
 
 	const container = document.createElement('div')
 	const editor = new tl.Editor({
@@ -83,7 +91,54 @@ export async function convertScene(
 		// Smaller than a typical window, so the saved zoom leaves room for tldraw's side panel and toolbar.
 		editor.updateViewportScreenBounds(new tl.Box(0, 0, 1280, 720))
 		if (elements.length) {
-			await tl.putExcalidrawContent(editor, { elements, files })
+			// The importer mints one shape id per element, in order, before anything else: record them so each
+			// element can be matched to its shape afterwards.
+			const ids: string[] = []
+			// (An internal tldraw hook: if a tldraw build lacks it, the drawing still converts, without the touch-ups below.)
+			const { mockUniqueId, restoreUniqueId } = tl as any
+			const hook = mockUniqueId && restoreUniqueId
+			if (hook) mockUniqueId(() => (ids.push(crypto.randomUUID().replace(/-/g, '').slice(0, 21)), ids[ids.length - 1]))
+			try {
+				await tl.putExcalidrawContent(editor, { elements, files })
+			} finally {
+				if (hook) restoreUniqueId()
+			}
+			const shapeOf = (i: number) => editor.getShape(`shape:${ids[i]}` as any) as any
+			const byId = new Map(elements.map((e) => [e.id, e]))
+			const fixes: any[] = []
+			elements.forEach((e, i) => {
+				const sh = shapeOf(i)
+				if (!sh) return // a label: the importer folds it into its container
+				const props: Record<string, unknown> = {}
+				// Excalidraw's widths are 1, 2 and 4; tldraw's xl is a marker, so the widest stops at l.
+				if ('size' in sh.props && sh.type !== 'text') props.size = e.strokeWidth >= 3 ? 'l' : e.strokeWidth >= 1.5 ? 'm' : 's'
+				if (e.fill) props.fill = e.fill
+				if (sh.type === 'text') Object.assign(props, { size: 'm', scale: (e.fontSize || 20) / 24, font: FONTS[e.fontFamily] ?? 'draw' }) // m is 24px: exact size
+				const label = e.boundElements?.map((b: any) => byId.get(b.id)).find((b: any) => b?.type === 'text')
+				if (label && 'font' in sh.props) {
+					props.font = FONTS[label.fontFamily] ?? 'draw'
+					if (sh.type === 'geo') props.verticalAlign = ({ top: 'start', bottom: 'end' } as any)[label.verticalAlign] ?? 'middle'
+				}
+				if (Object.keys(props).length) fixes.push({ id: sh.id, type: sh.type, x: sh.x, y: sh.y, props })
+			})
+			editor.updateShapes(fixes)
+			// Rescaling text nudges it; put it back where the importer placed it.
+			editor.updateShapes(fixes.filter((f) => f.type === 'text').map((f) => ({ id: f.id, type: 'text', x: f.x, y: f.y })))
+
+			// Frames: the importer has none. It also moves the drawing, so find by how much from any unrotated shape.
+			const anchor = elements.findIndex((e, i) => !e.angle && shapeOf(i))
+			if (frames.length && anchor >= 0) {
+				const at = editor.getShapePageTransform(shapeOf(anchor).id).point()
+				const [dx, dy] = [at.x - elements[anchor].x, at.y - elements[anchor].y]
+				for (const f of frames) {
+					const id = tl.createShapeId()
+					editor.createShape({ id, type: 'frame', x: f.x + dx, y: f.y + dy, props: { w: f.width, h: f.height, name: f.name ?? '' } })
+					editor.sendToBack([id])
+					const kids = elements.flatMap((e, i) => (e.frameId === f.id && shapeOf(i) ? [shapeOf(i)] : []))
+					// A grouped child moves with its group.
+					editor.reparentShapes([...new Set(kids.map((k) => (k.parentId.startsWith('shape:') ? k.parentId : k.id)))], id)
+				}
+			} else for (const _ of frames) skip('frame')
 			const strokes = editor.getCurrentPageShapes().filter((s) => s.type === 'draw')
 			// The importer leaves strokes flagged as still being drawn.
 			editor.updateShapes(strokes.map((s) => ({ id: s.id, type: 'draw', props: { isComplete: true } })))

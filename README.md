@@ -26,6 +26,27 @@ Handwriting and sketches come across stroke for stroke, as editable tldraw ink:
 
 Both drawings above are in [`demo/`](demo). Drop them in a vault and try it.
 
+### On other people's drawings
+
+These are community libraries from [libraries.excalidraw.com](https://libraries.excalidraw.com),
+converted as they come (credits in [`demo/public/`](demo/public)):
+
+![Community Excalidraw libraries before and after conversion](docs/demo.gif)
+
+## How close is it?
+
+Close, not identical. tldraw is a different drawing tool, and some things have no equivalent:
+
+- **One colour per shape.** Excalidraw lets a shape have one outline colour and another fill colour;
+  tldraw gives a shape a single colour from a fixed palette. White fills keep their outline colour
+  and solid dark fills stay solid; other fills take the fill's colour.
+- **Fonts.** Text keeps its size and position, in tldraw's own hand-drawn, sans or mono font.
+- **Filled outlines.** A closed line with a fill becomes an unfilled line.
+- **Line weights and dashes** map to tldraw's nearest preset.
+
+Simple diagrams and handwriting come across nearly unchanged. Dense, heavily styled drawings such
+as the wireframe kit above keep their content and layout but lose some styling.
+
 ## Get started
 
 1. Install and enable the [tldraw plugin](https://github.com/tldraw/obsidian-plugin) (1.33.0 or newer).
@@ -64,7 +85,8 @@ Good to know, because tldraw is a different tool:
 - **Colours** snap to the nearest colour in tldraw's palette. Light greys become grey, dark greys
   become black.
 - **Arrows with corners** become curved arrows.
-- **Left behind**, and listed in the report: frames, web embeds, LaTeX, embedded notes, and images
+- **Frames** become tldraw frames, with their contents inside.
+- **Left behind**, and listed in the report: web embeds, LaTeX, embedded notes, and images
   that point at a web address or a missing file.
 - **Links** elsewhere in your vault keep pointing at the Excalidraw originals.
 

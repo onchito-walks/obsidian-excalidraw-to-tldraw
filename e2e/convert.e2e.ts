@@ -38,7 +38,7 @@ describe('Excalidraw to tldraw', () => {
 			'sub/img/pixel.png',
 		])
 		expect(first.report).toContain('Converted 2 of 3')
-		expect(first.report).toContain('1 × frame')
+		expect(first.report).not.toContain('left behind')
 		expect(first.report).toContain('empty drawing')
 		expect(first.report).not.toContain('FAILED')
 		expect(first.report).not.toContain('source not found')
@@ -84,7 +84,7 @@ describe('Excalidraw to tldraw', () => {
 			await browser.saveScreenshot(`.wdio/${path.replace(/\W+/g, '-')}.png`)
 			expect(result).toEqual({
 				viewType: 'tldraw-view',
-				shapes: ['arrow', 'draw', 'geo', 'geo', 'image', 'text'],
+				shapes: ['arrow', 'draw', 'frame', 'geo', 'geo', 'image', 'text'],
 				label: true,
 				image: true,
 				errors: [],
