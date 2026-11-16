@@ -17,7 +17,7 @@ export function parseExcalidraw(text: string): ParsedDrawing {
 	if (!json) throw new Error('could not decompress the drawing')
 
 	const embedded: Record<string, string> = {}
-	const section = text.match(/^#{1,2} Embedded Files\r?\n([\s\S]*?)(?=^%%|^#{1,2} )/m)
+	const section = text.match(/^#{1,2} Embedded Files\r?\n([\s\S]*?)(?=^%%|^#{1,2} )/im)
 	for (const line of section?.[1].split(/\r?\n/) ?? []) {
 		const m = line.match(/^(\S+): (.+)$/)
 		if (m) embedded[m[1]] = m[2].trim()

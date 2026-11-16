@@ -37,6 +37,9 @@ test('parses plain, json-block and compressed Obsidian files', () => {
 	const parsed = parseExcalidraw(obsidianMd('```compressed-json\n' + wrapped + '\n```', embedded))
 	expect(parsed.scene.elements[0].type).toBe('rectangle')
 	expect(parsed.embedded).toEqual({ abc123def: '[[img/photo.png|100]]', fff000: '$$x^2$$' })
+	// Excalidraw plugin 1.x wrote single-# headings and "Embedded files".
+	const old = `---\nexcalidraw-plugin: parsed\n---\n# Text Elements\r\n\r\n# Embedded files\r\nabc: [[Pasted Image 1.jpg]]\r\n\r\n%%\r\n# Drawing\r\n\`\`\`json\r\n${json}\r\n\`\`\`\r\n%%`
+	expect(parseExcalidraw(old).embedded).toEqual({ abc: '[[Pasted Image 1.jpg]]' })
 	expect(() => parseExcalidraw('# just a note')).toThrow()
 })
 
