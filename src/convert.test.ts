@@ -207,6 +207,17 @@ test.each(demos)('%s keeps its layout: every shape sits where its element was', 
 	expect([...want].filter((k) => !near(got, k))).toEqual([])
 })
 
+test('a rounded filled outline stays curved', async () => {
+	const { file } = await convertScene(tl, {
+		elements: [el({ type: 'line', id: 'blob', backgroundColor: 'black', roundness: { type: 2 }, points: [[0, 0], [40, -30], [80, 0], [40, 30], [0, 0]] })],
+	})
+	const blob = load(file).find((r) => r.type === 'draw')
+	const pts = blob.props.segments.map((s: any) => tl.b64Vecs.decodePoints(s.path)[1])
+	expect(pts).toHaveLength(32) // 4 spans, 8 steps each
+	expect([pts[3].x, pts[3].y]).toEqual([15, -18.75]) // halfway along the first side: off the straight chord (20, -15)
+	expect([Math.round(pts.at(-1).x), Math.round(pts.at(-1).y)]).toEqual([0, 0])
+})
+
 test('an empty scene converts to nothing', async () => {
 	const { converted, skipped } = await convertScene(tl, { elements: [el({ type: 'text', isDeleted: true })] })
 	expect([converted, skipped]).toEqual([0, {}])

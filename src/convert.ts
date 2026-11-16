@@ -58,6 +58,20 @@ const STROKE: Record<string, number> = { s: 2, m: 3.5, l: 5, xl: 10 }
 const LABEL: Record<string, number> = { s: 18, m: 22, l: 26, xl: 32 }
 const width = (e: any) => (Number.isFinite(e.strokeWidth) && e.strokeWidth > 0 ? e.strokeWidth : 1)
 
+/** A smooth (Catmull-Rom) curve through the points, as short straight steps: how Excalidraw draws a rounded line. */
+function curve(p: number[][], steps = 8) {
+	const loop = Math.hypot(p[0][0] - p.at(-1)![0], p[0][1] - p.at(-1)![1]) < 2
+	const n = p.length - 1
+	const at = (i: number) => (loop ? p[((i % n) + n) % n] : p[Math.max(0, Math.min(n, i))])
+	const out = [p[0]]
+	for (let i = 0; i < n; i++)
+		for (let s = 1; s <= steps; s++) {
+			const t = s / steps
+			out.push([0, 1].map((k) => 0.5 * (2 * at(i)[k] + (at(i + 1)[k] - at(i - 1)[k]) * t + (2 * at(i - 1)[k] - 5 * at(i)[k] + 4 * at(i + 1)[k] - at(i + 2)[k]) * t * t + (3 * at(i)[k] - at(i - 1)[k] - 3 * at(i + 1)[k] + at(i + 2)[k]) * t ** 3)))
+		}
+	return out
+}
+
 const SUPPORTED = new Set(['rectangle', 'ellipse', 'diamond', 'freedraw', 'line', 'arrow', 'text', 'image'])
 
 /**
@@ -177,7 +191,7 @@ export async function convertScene(
 			elements.forEach((e, i) => {
 				const sh = shapeOf(i)
 				if (sh?.type !== 'line' || !e.closed) return
-				const pts = e.points.map(([x, y]: number[]) => ({ x, y, z: 0.5 }))
+				const pts = (e.roundness ? curve(e.points) : e.points).map(([x, y]: number[]) => ({ x, y, z: 0.5 }))
 				const { x, y, rotation, parentId, index, opacity, isLocked } = sh
 				// Create before deleting: a group left with one child dissolves.
 				const id = tl.createShapeId()
