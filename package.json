@@ -25,7 +25,7 @@
     "tldraw": "5.6.0",
     "tsx": "^4.23.15",
     "typescript": "6.0.3",
-    "vitest": "4.1.11",
+    "vitest": "4.1.12",
     "wdio-obsidian-reporter": "^3.5.0",
     "wdio-obsidian-service": "^3.5.0",
     "webdriverio": "^9.32.0"
