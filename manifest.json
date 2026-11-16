@@ -1,0 +1,9 @@
+{
+	"id": "excalidraw-to-tldraw",
+	"name": "Excalidraw to tldraw",
+	"version": "0.1.0",
+	"minAppVersion": "1.10.0",
+	"description": "Converts Excalidraw drawings to tldraw drawings, using tldraw's own Excalidraw importer.",
+	"author": "onchito-walks",
+	"isDesktopOnly": false
+}
