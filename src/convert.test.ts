@@ -6,7 +6,7 @@ import * as tl from 'tldraw'
 import { createTLSchema, parseTldrawJsonFile } from 'tldraw'
 import { expect, test } from 'vitest'
 import { TLDATA_END, TLDATA_START, convertScene, snapColor, toTldrawMarkdown } from './convert'
-import { attachmentName, cellText, parseExcalidraw } from './parse'
+import { attachmentName, cellText, parseExcalidraw, safeFolder, targetPath } from './parse'
 
 const el = (o: Record<string, unknown>) => ({
 	id: `el-${o.type}-${Math.random()}`,
@@ -247,4 +247,18 @@ test('an empty scene converts to nothing', async () => {
 test('text from a drawing cannot break or inject into the report table', () => {
 	const t = cellText('a|b\n| x | [[Secret]]')
 	expect(t).toBe('a/b / x / Secret')
+})
+
+test('converted drawings go next to the original, or mirror the folder layout into a chosen folder', () => {
+	expect(targetPath('a/b/Sketch.excalidraw.md')).toBe('a/b/Sketch.tldraw.md')
+	expect(targetPath('a/Plain.excalidraw')).toBe('a/Plain.tldraw.md')
+	expect(targetPath('a/b/Sketch.excalidraw.md', 'out')).toBe('out/a/b/Sketch.tldraw.md')
+	expect(targetPath('a/b/Sketch.excalidraw.md', 'out', 'a')).toBe('out/b/Sketch.tldraw.md')
+	expect(targetPath('Top.excalidraw.md', 'out/x/', '')).toBe('out/x/Top.tldraw.md')
+})
+
+test('a destination folder cannot leave the vault', () => {
+	expect(safeFolder(' /out/sub/ ')).toBe('out/sub')
+	expect(safeFolder('')).toBe('')
+	for (const bad of ['../x', 'a/../b', 'a/./b', 'C:\\x', 'a|b', 'a/<b>']) expect(safeFolder(bad)).toBeNull()
 })

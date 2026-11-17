@@ -68,8 +68,22 @@ What still differs, because tldraw is a different tool:
 3. Enable **Tracing Paper** under Settings → Community plugins.
 4. Open the command palette and run **Convert all Excalidraw drawings to tldraw**.
 
-`Sketch.excalidraw.md` becomes `Sketch.tldraw.md`, in the same folder. To convert one drawing, open
-it and run **Convert current Excalidraw drawing to tldraw**.
+`Sketch.excalidraw.md` becomes `Sketch.tldraw.md`, in the same folder.
+
+## Convert some, not all
+
+![The chooser: from folder, find, save into a folder, tick drawings](docs/picker.png)
+
+- **Right-click a folder** in the file explorer, **Convert N Excalidraw drawings to tldraw…**, and
+  every drawing in it is ticked, ready to go.
+- **Right-click a drawing**, or several selected drawings, **Convert to tldraw**.
+- Or run **Choose Excalidraw drawings to convert to tldraw…** from the command palette. Pick a
+  *From folder*, type part of a name in *Find*, tick what you want.
+- **Save the tldraw copies** next to each original (the default), or **in one folder**. The folder
+  layout below *From folder* is kept, so two drawings with the same name never collide. The folder is
+  created if it does not exist, and it must be inside your vault.
+- Drawings already converted show as such and are never converted twice.
+- **Convert current Excalidraw drawing to tldraw** does the drawing you have open.
 
 ## What you can count on
 

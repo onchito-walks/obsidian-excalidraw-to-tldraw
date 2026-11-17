@@ -1,6 +1,7 @@
-import { Notice, Plugin, TFile, base64ToArrayBuffer } from 'obsidian'
+import { Notice, Plugin, TFile, TFolder, base64ToArrayBuffer, normalizePath } from 'obsidian'
 import { type Tldraw, convertScene, toTldrawMarkdown } from './convert'
-import { parseExcalidraw, attachmentName, cellText } from './parse'
+import { parseExcalidraw, attachmentName, cellText, targetPath } from './parse'
+import { Picker } from './picker'
 
 const MIN_TLDRAW_PLUGIN = '1.33.0' // first release that shares its tldraw with other plugins
 const VAULT = 'asset:vault:' // marks an image that lives in the vault until its asset is linked (tldraw only accepts a few URL schemes)
@@ -12,6 +13,13 @@ const MIME: Record<string, string> = {
 	gif: 'image/gif',
 	webp: 'image/webp',
 	svg: 'image/svg+xml',
+}
+
+export interface Options {
+	/** Folder to put converted drawings in; empty = next to each original. */
+	dest?: string
+	/** With a destination, the folder whose layout the converted files mirror. */
+	root?: string
 }
 
 export default class TracingPaper extends Plugin {
@@ -31,6 +39,47 @@ export default class TracingPaper extends Plugin {
 				return true
 			},
 		})
+		this.addCommand({
+			id: 'choose',
+			name: 'Choose Excalidraw drawings to convert to tldraw…',
+			callback: () => new Picker(this).open(),
+		})
+		// Right-click a folder, a drawing, or a selection of drawings in the file explorer.
+		this.registerEvent(
+			this.app.workspace.on('file-menu', (menu, file) => {
+				const here = file instanceof TFolder ? this.drawingsIn(file) : file instanceof TFile && this.isExcalidraw(file) ? [file] : []
+				if (!here.length) return
+				menu.addItem((item) =>
+					item
+						.setTitle(file instanceof TFolder ? `Convert ${here.length} Excalidraw drawing${here.length === 1 ? '' : 's'} to tldraw…` : 'Convert to tldraw')
+						.setIcon('pencil-line')
+						.onClick(() => (file instanceof TFolder ? new Picker(this, file.path).open() : void this.run(here)))
+				)
+			})
+		)
+		this.registerEvent(
+			this.app.workspace.on('files-menu', (menu, files) => {
+				const here = files.filter((f): f is TFile => f instanceof TFile && this.isExcalidraw(f))
+				if (here.length > 1)
+					menu.addItem((item) => item.setTitle(`Convert ${here.length} Excalidraw drawings to tldraw`).setIcon('pencil-line').onClick(() => void this.run(here)))
+			})
+		)
+	}
+
+	drawings() {
+		return this.app.vault.getFiles().filter((f) => this.isExcalidraw(f))
+	}
+
+	drawingsIn(folder: TFolder) {
+		return this.drawings().filter((f) => folder.isRoot() || f.path.startsWith(folder.path + '/'))
+	}
+
+	async ensureFolder(path: string) {
+		let at = ''
+		for (const seg of path.split('/').filter(Boolean)) {
+			at = at ? `${at}/${seg}` : seg
+			if (!this.app.vault.getAbstractFileByPath(at)) await this.app.vault.createFolder(at)
+		}
 	}
 
 	isExcalidraw(f: TFile) {
@@ -42,7 +91,7 @@ export default class TracingPaper extends Plugin {
 	}
 
 	/** Originals are never touched; an existing target is never overwritten. */
-	async run(files: TFile[]) {
+	async run(files: TFile[], { dest = '', root = '' }: Options = {}) {
 		// Conversion runs on the tldraw plugin's own copy of tldraw: same importer, same schema as the plugin that opens the result.
 		const tldrawPlugin = (this.app as any).plugins?.plugins?.tldraw
 		const tl: Tldraw | undefined = tldrawPlugin?.instance?.packages?.tldraw
@@ -58,7 +107,7 @@ export default class TracingPaper extends Plugin {
 		const progress = new Notice('', 0)
 		for (const [i, file] of files.entries()) {
 			progress.setMessage(`Excalidraw → tldraw: ${i + 1}/${files.length}`)
-			const target = file.path.replace(/(\.excalidraw)?\.(md|excalidraw)$/, '') + '.tldraw.md'
+			const target = normalizePath(targetPath(file.path, dest, root))
 			try {
 				if (this.app.vault.getAbstractFileByPath(target)) {
 					rows.push(`| [[${file.path}]] | already converted | [[${target}]] |`)
@@ -82,6 +131,7 @@ export default class TracingPaper extends Plugin {
 					asset.props.src = `asset:obsidian.blockref.${id}`
 					assetLinks.push(`${this.app.fileManager.generateMarkdownLink(image, target)}\n^${id}`)
 				}
+				if (dest) await this.ensureFolder(target.split('/').slice(0, -1).join('/'))
 				await this.app.vault.create(
 					target,
 					toTldrawMarkdown(tldrawFile, installed, tldrawVersion, assetLinks)
@@ -105,10 +155,12 @@ export default class TracingPaper extends Plugin {
 			'|---|---|---|',
 			...rows,
 		].join('\n')
-		const existing = this.app.vault.getAbstractFileByPath(REPORT)
+		const reportPath = dest ? `${dest}/${REPORT}` : REPORT
+		if (dest) await this.ensureFolder(dest)
+		const existing = this.app.vault.getAbstractFileByPath(reportPath)
 		if (existing instanceof TFile) await this.app.vault.modify(existing, report)
-		else await this.app.vault.create(REPORT, report)
-		new Notice(`Excalidraw → tldraw: converted ${made} of ${files.length}. See "${REPORT}".`, 10000)
+		else await this.app.vault.create(reportPath, report)
+		new Notice(`Excalidraw → tldraw: converted ${made} of ${files.length}. See "${reportPath}".`, 10000)
 	}
 
 	/** Every image ends up as a vault file the converter can point at: Obsidian Excalidraw already links them. */

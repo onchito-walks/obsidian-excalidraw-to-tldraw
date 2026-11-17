@@ -39,3 +39,20 @@ export function attachmentName(target: string, id: string, ext: string) {
 export function cellText(s: string) {
 	return s.replace(/[\r\n]+/g, ' ').replace(/\|/g, '/').replace(/[[\]]/g, '')
 }
+
+/**
+ * Where a converted drawing goes. Next to the original by default; with a destination folder the converted
+ * files mirror the folder layout below `root`, so two drawings with the same name never collide.
+ */
+export function targetPath(path: string, dest = '', root = '') {
+	const name = path.replace(/(\.excalidraw)?\.(md|excalidraw)$/, '') + '.tldraw.md'
+	if (!dest) return name
+	const rel = root && name.startsWith(root + '/') ? name.slice(root.length + 1) : name
+	return `${dest}/${rel}`.replace(/\/+/g, '/')
+}
+
+/** A destination folder must stay inside the vault: no .. segments, no absolute paths. */
+export function safeFolder(path: string) {
+	const p = path.trim().replace(/^\/+|\/+$/g, '')
+	return p.split('/').some((seg) => seg === '..' || seg === '.' || /[\\:*?"<>|]/.test(seg)) ? null : p
+}
