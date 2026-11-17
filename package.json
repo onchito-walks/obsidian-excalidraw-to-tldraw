@@ -1,6 +1,6 @@
 {
   "name": "tracing-paper",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "type": "module",
   "scripts": {
     "build": "tsc --noEmit && node esbuild.config.mjs",

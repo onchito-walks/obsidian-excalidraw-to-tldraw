@@ -1,7 +1,7 @@
 {
 	"id": "tracing-paper",
 	"name": "Tracing Paper",
-	"version": "1.4.0",
+	"version": "1.4.1",
 	"minAppVersion": "1.10.0",
 	"description": "Convert all your Excalidraw drawings to tldraw in one command. Keeps layout, line weights, fills and colours, and leaves the originals untouched.",
 	"author": "onchito-walks",
