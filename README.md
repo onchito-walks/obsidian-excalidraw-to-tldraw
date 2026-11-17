@@ -110,7 +110,7 @@ Good to know, because tldraw is a different tool:
 
 - **Colours** snap to the nearest colour in tldraw's palette. Light greys become grey, dark greys
   become black.
-- **Arrows with corners** become curved arrows.
+- **Arrows with corners** stay right-angled when every leg is horizontal or vertical; other multi-point arrows become curved.
 - **Frames** become tldraw frames, with their contents inside.
 - **Left behind**, and listed in the report: web embeds, LaTeX, embedded notes, and images
   that point at a web address or a missing file.
