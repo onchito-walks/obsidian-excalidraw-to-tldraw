@@ -34,3 +34,8 @@ function withElements(scene: any) {
 export function attachmentName(target: string, id: string, ext: string) {
 	return `${target.split('/').pop()!.replace(/\.tldraw\.md$/, '')}-${id.replace(/[^\w-]/g, '').slice(0, 8) || 'image'}.${ext}`
 }
+
+/** Text from a drawing, made safe for one cell of the report table: no pipes, line breaks or link brackets. */
+export function cellText(s: string) {
+	return s.replace(/[\r\n]+/g, ' ').replace(/\|/g, '/').replace(/[[\]]/g, '')
+}

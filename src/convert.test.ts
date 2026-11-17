@@ -6,7 +6,7 @@ import * as tl from 'tldraw'
 import { createTLSchema, parseTldrawJsonFile } from 'tldraw'
 import { expect, test } from 'vitest'
 import { TLDATA_END, TLDATA_START, convertScene, snapColor, toTldrawMarkdown } from './convert'
-import { attachmentName, parseExcalidraw } from './parse'
+import { attachmentName, cellText, parseExcalidraw } from './parse'
 
 const el = (o: Record<string, unknown>) => ({
 	id: `el-${o.type}-${Math.random()}`,
@@ -242,4 +242,9 @@ test('an image id from a file cannot steer where its attachment is written', () 
 test('an empty scene converts to nothing', async () => {
 	const { converted, skipped } = await convertScene(tl, { elements: [el({ type: 'text', isDeleted: true })] })
 	expect([converted, skipped]).toEqual([0, {}])
+})
+
+test('text from a drawing cannot break or inject into the report table', () => {
+	const t = cellText('a|b\n| x | [[Secret]]')
+	expect(t).toBe('a/b / x / Secret')
 })

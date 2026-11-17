@@ -1,6 +1,6 @@
 import { Notice, Plugin, TFile, base64ToArrayBuffer } from 'obsidian'
 import { type Tldraw, convertScene, toTldrawMarkdown } from './convert'
-import { parseExcalidraw, attachmentName } from './parse'
+import { parseExcalidraw, attachmentName, cellText } from './parse'
 
 const MIN_TLDRAW_PLUGIN = '1.33.0' // first release that shares its tldraw with other plugins
 const VAULT = 'asset:vault:' // marks an image that lives in the vault until its asset is linked (tldraw only accepts a few URL schemes)
@@ -89,11 +89,11 @@ export default class TracingPaper extends Plugin {
 				made++
 				const left = [...Object.entries(skipped).map(([why, n]) => `${n} × ${why}`), ...missing]
 				rows.push(
-					`| [[${file.path}]] | ${converted} shapes${left.length ? `; left behind: ${left.join(', ')}` : ''} | [[${target}]] |`
+					`| [[${file.path}]] | ${converted} shapes${left.length ? `; left behind: ${cellText(left.join(', '))}` : ''} | [[${target}]] |`
 				)
 			} catch (e) {
 				console.error('tracing-paper', file.path, e)
-				rows.push(`| [[${file.path}]] | FAILED: ${String((e as Error)?.message ?? e).replace(/\|/g, '/')} | |`)
+				rows.push(`| [[${file.path}]] | FAILED: ${cellText(String((e as Error)?.message ?? e))} | |`)
 			}
 		}
 		progress.hide()
