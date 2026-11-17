@@ -1,7 +1,53 @@
 import LZString from 'lz-string'
 
+/** The parts of an Excalidraw element this plugin reads (the scene is a file we do not control: every field may be absent). */
+export interface El {
+	id: string
+	type: string
+	x: number
+	y: number
+	width: number
+	height: number
+	angle: number
+	isDeleted?: boolean
+	strokeWidth?: number
+	strokeColor: string
+	backgroundColor: string
+	fillStyle?: string
+	roughness?: number
+	roundness?: unknown
+	points?: number[][]
+	link?: string | null
+	elbowed?: boolean
+	boundElements?: { id: string; type?: string }[] | null
+	groupIds?: string[]
+	containerId?: string | null
+	fontSize?: number
+	fontFamily?: number
+	textAlign?: string
+	verticalAlign?: string
+	fileId?: string
+	frameId?: string | null
+	name?: string
+	/** Set by convertScene, not by Excalidraw. */
+	preset?: string
+	closed?: boolean
+	fill?: string
+}
+
+export interface ExFile {
+	mimeType?: string
+	size?: number
+	dataURL?: string
+}
+
+export interface Scene {
+	elements: El[]
+	files?: Record<string, ExFile>
+}
+
 export interface ParsedDrawing {
-	scene: { elements: any[]; files?: Record<string, any> }
+	scene: Scene
 	/** Obsidian "Embedded Files" section: fileId -> raw value ([[link]], URL or $$latex$$). */
 	embedded: Record<string, string>
 }
@@ -16,7 +62,7 @@ export function parseExcalidraw(text: string): ParsedDrawing {
 		block[1] === 'json' ? block[2] : LZString.decompressFromBase64(block[2].replace(/[\r\n]/g, ''))
 	if (!json) throw new Error('could not decompress the drawing')
 
-	const embedded: Record<string, string> = Object.create(null) // keys come from the file: no inherited names
+	const embedded: Record<string, string> = Object.create(null) as Record<string, string> // keys come from the file: no inherited names
 	const section = text.match(/^#{1,2} Embedded Files\r?\n([\s\S]*?)(?=^%%|^#{1,2} )/im)
 	for (const line of section?.[1].split(/\r?\n/) ?? []) {
 		const m = line.match(/^(\S+): (.+)$/)
@@ -25,9 +71,9 @@ export function parseExcalidraw(text: string): ParsedDrawing {
 	return { scene: withElements(JSON.parse(json)), embedded }
 }
 
-function withElements(scene: any) {
-	if (!Array.isArray(scene?.elements)) throw new Error('not an Excalidraw scene')
-	return scene
+function withElements(scene: unknown) {
+	if (!Array.isArray((scene as Scene | null)?.elements)) throw new Error('not an Excalidraw scene')
+	return scene as Scene
 }
 
 /** A vault file name for an image stored inside a drawing. The id comes from the file, so only safe characters are kept. */

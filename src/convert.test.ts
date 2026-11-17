@@ -6,15 +6,18 @@ import * as tl from 'tldraw'
 import { createTLSchema, parseTldrawJsonFile } from 'tldraw'
 import { expect, test } from 'vitest'
 import { TLDATA_END, TLDATA_START, convertScene, snapColor, toTldrawMarkdown } from './convert'
-import { attachmentName, cellText, parseExcalidraw, safeFolder, targetPath } from './parse'
+import { type El, attachmentName, cellText, parseExcalidraw, safeFolder, targetPath } from './parse'
 
-const el = (o: Record<string, unknown>) => ({
+// Obsidian provides createDiv(); the test runtime does not.
+;(globalThis as { createDiv?: () => HTMLElement }).createDiv = () => document.createElement('div')
+
+const el = (o: Record<string, unknown>): El => ({
 	id: `el-${o.type}-${Math.random()}`,
 	x: 10, y: 20, width: 100, height: 50, angle: 0, opacity: 100, groupIds: [], locked: false,
 	strokeColor: '#1e1e1e', backgroundColor: 'transparent', fillStyle: 'solid', strokeWidth: 2,
 	strokeStyle: 'solid', roughness: 1, isDeleted: false, link: null,
 	...o,
-}) // boundElements deliberately absent: old files omit it
+} as unknown as El) // boundElements deliberately absent: old files omit it
 
 /** What the tldraw plugin does on open: tldraw's own parser + validator + migrations. */
 function load(file: unknown) {

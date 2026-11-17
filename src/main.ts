@@ -2,6 +2,7 @@ import { Notice, Plugin, TFile, TFolder, base64ToArrayBuffer, normalizePath } fr
 import { type Tldraw, convertScene, toTldrawMarkdown } from './convert'
 import { parseExcalidraw, attachmentName, cellText, targetPath } from './parse'
 import { Picker } from './picker'
+import type { ExFile, Scene } from './parse'
 
 const MIN_TLDRAW_PLUGIN = '1.33.0' // first release that shares its tldraw with other plugins
 const VAULT = 'asset:vault:' // marks an image that lives in the vault until its asset is linked (tldraw only accepts a few URL schemes)
@@ -20,6 +21,12 @@ export interface Options {
 	dest?: string
 	/** With a destination, the folder whose layout the converted files mirror. */
 	root?: string
+}
+
+/** The tldraw plugin as far as this one reads it. */
+interface TldrawPlugin {
+	manifest: { version: string }
+	instance?: { packages?: { tldraw?: Tldraw } }
 }
 
 export default class TracingPaper extends Plugin {
@@ -93,15 +100,15 @@ export default class TracingPaper extends Plugin {
 	/** Originals are never touched; an existing target is never overwritten. */
 	async run(files: TFile[], { dest = '', root = '' }: Options = {}) {
 		// Conversion runs on the tldraw plugin's own copy of tldraw: same importer, same schema as the plugin that opens the result.
-		const tldrawPlugin = (this.app as any).plugins?.plugins?.tldraw
-		const tl: Tldraw | undefined = tldrawPlugin?.instance?.packages?.tldraw
-		if (!tl?.putExcalidrawContent) {
+		const tldrawPlugin = (this.app as unknown as { plugins?: { plugins?: { tldraw?: TldrawPlugin } } }).plugins?.plugins?.tldraw
+		const tl = tldrawPlugin?.instance?.packages?.tldraw
+		if (!tldrawPlugin || !tl?.putExcalidrawContent) {
 			new Notice(`Tracing Paper needs the tldraw plugin, ${MIN_TLDRAW_PLUGIN} or newer, installed and enabled.`, 10000)
 			return
 		}
 		const installed: string = tldrawPlugin.manifest.version
 		const tldrawVersion: string =
-			(window as any).__TLDRAW_LIBRARY_VERSIONS__?.versions?.find((v: any) => v.name === 'tldraw')?.version ?? 'unknown'
+			(window as unknown as { __TLDRAW_LIBRARY_VERSIONS__?: { versions?: { name: string; version: string }[] } }).__TLDRAW_LIBRARY_VERSIONS__?.versions?.find((v) => v.name === 'tldraw')?.version ?? 'unknown'
 		const rows: string[] = []
 		let made = 0
 		const progress = new Notice('', 0)
@@ -122,7 +129,7 @@ export default class TracingPaper extends Plugin {
 				}
 				// Vault images stay vault files: point each asset at a linked block, as the tldraw plugin does.
 				const assetLinks: string[] = []
-				for (const asset of tldrawFile.records as any[]) {
+				for (const asset of tldrawFile.records as unknown as { typeName: string; props: { src?: string } }[]) {
 					const linked = asset.typeName === 'asset' && asset.props.src?.startsWith(VAULT) && asset.props.src.slice(VAULT.length)
 					if (!linked) continue
 					const image = this.app.vault.getAbstractFileByPath(linked)
@@ -164,25 +171,25 @@ export default class TracingPaper extends Plugin {
 	}
 
 	/** Every image ends up as a vault file the converter can point at: Obsidian Excalidraw already links them. */
-	async loadEmbeddedImages(scene: any, embedded: Record<string, string>, sourcePath: string, target: string) {
+	async loadEmbeddedImages(scene: Scene, embedded: Record<string, string>, sourcePath: string, target: string) {
 		const missing: string[] = []
-		scene.files = Object.assign(Object.create(null), scene.files) // ids come from the file: no inherited names
+		const files = (scene.files = Object.assign(Object.create(null) as Record<string, ExFile>, scene.files)) // ids come from the file: no inherited names
 		for (const [id, raw] of Object.entries(embedded)) {
 			const link = raw.match(/^\[\[([^\]|#]+)/)?.[1]
 			const dest = link && this.app.metadataCache.getFirstLinkpathDest(link, sourcePath)
 			const mimeType = dest && MIME[dest.extension.toLowerCase()]
 			if (!dest || !mimeType) {
 				// shortcut: web images, LaTeX and embedded notes are not carried over; fetch/render them here if that ever matters.
-				if (scene.elements.some((e: any) => e.fileId === id && !e.isDeleted)) missing.push(`embed ${raw.slice(0, 60)}`)
+				if (scene.elements.some((e) => e.fileId === id && !e.isDeleted)) missing.push(`embed ${raw.slice(0, 60)}`)
 				continue
 			}
-			scene.files[id] = { mimeType, size: dest.stat.size, dataURL: VAULT + dest.path }
+			files[id] = { mimeType, size: dest.stat.size, dataURL: VAULT + dest.path }
 		}
 		// tldraw's plugin does not display inline (data:) images, so those become vault attachments too.
-		for (const [id, f] of Object.entries<any>(scene.files)) {
+		for (const [id, f] of Object.entries(files)) {
 			const inline = typeof f?.dataURL === 'string' && f.dataURL.match(/^data:(image\/[\w+.-]+);base64,(.*)$/s)
 			const ext = inline && Object.keys(MIME).find((k) => MIME[k] === inline[1])
-			if (!inline || !ext || !scene.elements.some((e: any) => e.fileId === id && !e.isDeleted)) continue
+			if (!inline || !ext || !scene.elements.some((e) => e.fileId === id && !e.isDeleted)) continue
 			const name = attachmentName(target, id, ext)
 			const path = await this.app.fileManager.getAvailablePathForAttachment(name, target)
 			await this.app.vault.createBinary(path, base64ToArrayBuffer(inline[2]))

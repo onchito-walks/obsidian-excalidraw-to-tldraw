@@ -1,4 +1,5 @@
-import type { TldrawFile } from 'tldraw'
+import type { IndexKey, TLParentId, TLShapeId, TldrawFile } from 'tldraw'
+import type { El, Scene } from './parse'
 
 /** The tldraw module. The plugin takes it from the installed tldraw plugin instead of bundling its own. */
 export type Tldraw = typeof import('tldraw')
@@ -56,7 +57,10 @@ function colorName(hex: string) {
 // What tldraw draws, in px at scale 1: line weight and label text size per size preset.
 const STROKE: Record<string, number> = { s: 2, m: 3.5, l: 5, xl: 10 }
 const LABEL: Record<string, number> = { s: 18, m: 22, l: 26, xl: 32 }
-const width = (e: any) => (Number.isFinite(e.strokeWidth) && e.strokeWidth > 0 ? e.strokeWidth : 1)
+const width = (e: El) => {
+	const w = e.strokeWidth ?? 0
+	return Number.isFinite(w) && w > 0 ? w : 1
+}
 
 /** A smooth (Catmull-Rom) curve through the points, as short straight steps: how Excalidraw draws a rounded line. */
 function curve(p: number[][], steps = 8) {
@@ -72,6 +76,20 @@ function curve(p: number[][], steps = 8) {
 	return out
 }
 
+/** The slice of a tldraw shape this file touches; props differ per shape type, so they stay loose. */
+interface Sh {
+	id: TLShapeId
+	type: string
+	x: number
+	y: number
+	rotation: number
+	parentId: TLParentId
+	index: IndexKey
+	opacity: number
+	isLocked: boolean
+	props: Record<string, unknown>
+}
+
 const SUPPORTED = new Set(['rectangle', 'ellipse', 'diamond', 'freedraw', 'line', 'arrow', 'text', 'image'])
 
 /**
@@ -80,7 +98,7 @@ const SUPPORTED = new Set(['rectangle', 'ellipse', 'diamond', 'freedraw', 'line'
  */
 export async function convertScene(
 	tl: Tldraw,
-	scene: { elements: any[]; files?: Record<string, any> }
+	scene: Scene
 ): Promise<Conversion> {
 	const skipped: Record<string, number> = {}
 	const skip = (why: string) => void (skipped[why] = (skipped[why] ?? 0) + 1)
@@ -91,23 +109,32 @@ export async function convertScene(
 	const elements = scene.elements
 		.filter((e) => {
 			if (e.isDeleted || e.type === 'frame') return false
-			if (!SUPPORTED.has(e.type)) return skip(e.type), false
-			if (e.type === 'image' && !files[e.fileId]?.dataURL) return skip('image (source not found)'), false
+			if (!SUPPORTED.has(e.type)) {
+				skip(e.type)
+				return false
+			}
+			if (e.type === 'image' && !files[e.fileId ?? '']?.dataURL) {
+				skip('image (source not found)')
+				return false
+			}
 			const minPoints = e.type === 'freedraw' ? 1 : 2
-			if ('freedraw line arrow'.includes(e.type) && !(e.points?.length >= minPoints))
-				return skip(`${e.type} (no points)`), false
+			if ('freedraw line arrow'.includes(e.type) && !((e.points?.length ?? 0) >= minPoints)) {
+				skip(`${e.type} (no points)`)
+				return false
+			}
 			return true
 		})
-		.map((e) => {
-			const strokeColor = snapColor(e.strokeColor)
-			const backgroundColor = snapColor(e.backgroundColor)
+		.map((e): El => {
+			const pts = e.points ?? []
+			const strokeColor = snapColor(e.strokeColor) as string
+			const backgroundColor = snapColor(e.backgroundColor) as string
 			// The importer gives a filled shape one colour, the fill's, shown as a pale tint. Excalidraw's two
 			// commonest fills need better: white keeps the outline colour, a solid dark fill stays solid.
 			// Excalidraw fills a line's outline whether or not its ends meet.
-			const closed = e.type === 'line' && e.points?.length > 2 && backgroundColor !== 'transparent'
-			const fill = !GEO.has(e.type) && !closed ? '' : WHITE.has(backgroundColor as string) ? 'semi' : e.fillStyle === 'solid' && DARK.has(backgroundColor as string) ? 'fill' : ''
+			const closed = e.type === 'line' && pts.length > 2 && backgroundColor !== 'transparent'
+			const fill = !GEO.has(e.type) && !closed ? '' : WHITE.has(backgroundColor) ? 'semi' : e.fillStyle === 'solid' && DARK.has(backgroundColor) ? 'fill' : ''
 			// A multi-point arrow whose legs are all horizontal or vertical is an elbow arrow, not a curve.
-			const elbowed = e.elbowed || (e.type === 'arrow' && e.points.length > 2 && e.points.slice(1).every((p: number[], k: number) => Math.abs(p[0] - e.points[k][0]) < 1 || Math.abs(p[1] - e.points[k][1]) < 1))
+			const elbowed = e.elbowed || (e.type === 'arrow' && pts.length > 2 && pts.slice(1).every((p, k) => Math.abs(p[0] - pts[k][0]) < 1 || Math.abs(p[1] - pts[k][1]) < 1))
 			// Only web and mail links survive: tldraw refuses any other, and would refuse the whole drawing with it.
 			const link = typeof e.link === 'string' && /^(https?:\/\/|mailto:)/i.test(e.link) ? e.link : null
 			return { ...e, link, elbowed, closed, boundElements: e.boundElements ?? null, angle: e.angle ?? 0, strokeColor, backgroundColor: fill === 'semi' ? strokeColor : backgroundColor, fill }
@@ -118,25 +145,29 @@ export async function convertScene(
 		const count = new Map<string, number>()
 		for (const e of elements) if (e.groupIds?.[0]) count.set(e.groupIds[0], (count.get(e.groupIds[0]) ?? 0) + 1)
 		again = false
-		for (const e of elements) if (e.groupIds?.[0] && count.get(e.groupIds[0]) === 1) (e.groupIds = e.groupIds.slice(1)), (again = true)
+		for (const e of elements)
+			if (e.groupIds?.[0] && count.get(e.groupIds[0]) === 1) {
+				e.groupIds = e.groupIds.slice(1)
+				again = true
+			}
 	}
 
 	// A label shares its shape's scale, so its size fixes the line weight to one of four presets. When none
 	// is within a quarter of the real weight, the label becomes its own text, grouped with the shape.
 	const byId = new Map(elements.map((e) => [e.id, e]))
 	for (const e of elements) {
-		const label = GEO.has(e.type) && e.boundElements?.map((b: any) => byId.get(b.id)).find((b: any) => b?.type === 'text')
+		const label = GEO.has(e.type) && e.boundElements?.map((b) => byId.get(b.id)).find((b) => b?.type === 'text')
 		if (!label) continue
 		const font = label.fontSize || 20
 		const weight = (p: string) => (STROKE[p] * font) / LABEL[p]
 		e.preset = Object.keys(STROKE).reduce((a, b) => (Math.abs(weight(b) - width(e)) < Math.abs(weight(a) - width(e)) ? b : a))
 		if (Math.abs(weight(e.preset) - width(e)) / width(e) <= 0.25) continue
-		e.boundElements = e.boundElements.filter((b: any) => b.id !== label.id)
+		e.boundElements = e.boundElements?.filter((b) => b.id !== label.id) ?? null
 		if (!e.groupIds?.length) e.groupIds = [`label-${e.id}`]
 		Object.assign(label, { containerId: null, groupIds: e.groupIds })
 	}
 
-	const container = document.createElement('div')
+	const container = createDiv()
 	const editor = new tl.Editor({
 		store: tl.createTLStore({ shapeUtils: tl.defaultShapeUtils, bindingUtils: tl.defaultBindingUtils }),
 		shapeUtils: tl.defaultShapeUtils,
@@ -153,23 +184,28 @@ export async function convertScene(
 			// element can be matched to its shape afterwards.
 			const ids: string[] = []
 			// (An internal tldraw hook: if a tldraw build lacks it, the drawing still converts, without the touch-ups below.)
-			const { mockUniqueId, restoreUniqueId } = tl as any
+			const { mockUniqueId, restoreUniqueId } = tl as unknown as { mockUniqueId?: (next: () => string) => void; restoreUniqueId?: () => void }
 			const hook = mockUniqueId && restoreUniqueId
-			if (hook) mockUniqueId(() => (ids.push(crypto.randomUUID().replace(/-/g, '').slice(0, 21)), ids[ids.length - 1]))
+			if (hook)
+				mockUniqueId(() => {
+					const id = crypto.randomUUID().replace(/-/g, '').slice(0, 21)
+					ids.push(id)
+					return id
+				})
 			try {
 				await tl.putExcalidrawContent(editor, { elements, files })
 			} finally {
 				if (hook) restoreUniqueId()
 			}
-			const shapeOf = (i: number) => editor.getShape(`shape:${ids[i]}` as any) as any
-			const fixes: any[] = []
+			const shapeOf = (i: number) => editor.getShape(`shape:${ids[i]}` as TLShapeId) as unknown as Sh | undefined
+			const fixes: { id: TLShapeId; type: string; x: number; y: number; props: Record<string, unknown> }[] = []
 			elements.forEach((e, i) => {
 				const sh = shapeOf(i)
 				if (!sh) return // a label: the importer folds it into its container
 				const props: Record<string, unknown> = {}
 				if (e.fill && sh.type === 'geo') props.fill = e.fill
-				if (sh.type === 'text') Object.assign(props, { size: 'm', scale: (e.fontSize || 20) / 24, font: FONTS[e.fontFamily] ?? 'draw' }) // m is 24px: exact size
-				const label = e.boundElements?.map((b: any) => byId.get(b.id)).find((b: any) => b?.type === 'text')
+				if (sh.type === 'text') Object.assign(props, { size: 'm', scale: (e.fontSize || 20) / 24, font: FONTS[e.fontFamily ?? 0] ?? 'draw' }) // m is 24px: exact size
+				const label = e.boundElements?.map((b) => byId.get(b.id)).find((b) => b?.type === 'text')
 				// Exact line weight: scale multiplies a preset's weight. It also sizes a label, so a labelled shape is
 				// scaled for its text, on the preset whose weight then lands nearest (arrows: s, 18px labels).
 				if (sh.type === 'geo' || sh.type === 'line' || sh.type === 'arrow') {
@@ -182,18 +218,19 @@ export async function convertScene(
 				// Excalidraw's 'architect' sloppiness is a clean line; tldraw's default is hand-drawn.
 				if (e.roughness === 0 && sh.props.dash === 'draw') props.dash = 'solid'
 				if (label && 'font' in sh.props) {
-					props.font = FONTS[label.fontFamily] ?? 'draw'
-					if (sh.type === 'geo') props.verticalAlign = ({ top: 'start', bottom: 'end' } as any)[label.verticalAlign] ?? 'middle'
+					props.font = FONTS[label.fontFamily ?? 0] ?? 'draw'
+					if (sh.type === 'geo') props.verticalAlign = ({ top: 'start', bottom: 'end' } as Record<string, string>)[label.verticalAlign ?? ''] ?? 'middle'
 				}
 				if (Object.keys(props).length) fixes.push({ id: sh.id, type: sh.type, x: sh.x, y: sh.y, props })
 			})
-			editor.updateShapes(fixes)
+			editor.updateShapes(fixes as never)
 
 			// A tldraw line cannot be filled: a closed, filled outline becomes a closed straight-edged draw shape.
 			elements.forEach((e, i) => {
 				const sh = shapeOf(i)
 				if (sh?.type !== 'line' || !e.closed) return
-				const pts = (e.roundness ? curve(e.points) : e.points).map(([x, y]: number[]) => ({ x, y, z: 0.5 }))
+				const line = e.points ?? []
+				const pts = (e.roundness ? curve(line) : line).map(([x, y]) => ({ x, y, z: 0.5 }))
 				const { x, y, rotation, parentId, index, opacity, isLocked } = sh
 				// Create before deleting: a group left with one child dissolves.
 				const id = tl.createShapeId()
@@ -201,11 +238,11 @@ export async function convertScene(
 				editor.createShape({
 					id, type: 'draw', x, y, rotation, parentId, index, opacity, isLocked,
 					props: {
-						segments: pts.slice(1).map((p: any, k: number) => ({ type: 'straight', path: tl.b64Vecs.encodePoints([pts[k], p]) })),
+						segments: pts.slice(1).map((p, k) => ({ type: 'straight', path: tl.b64Vecs.encodePoints([pts[k], p]) })),
 						isClosed: true, isComplete: true, fill: e.fill || 'solid', dash: sh.props.dash, size: sh.props.size, scale: sh.props.scale,
 						color: e.fill === 'semi' ? sh.props.color : colorName(e.backgroundColor),
 					},
-				} as any)
+				} as never)
 				editor.deleteShapes([sh.id])
 			})
 			// tldraw gives a shape one colour. An outline of one colour around a fill of another becomes two shapes:
@@ -217,26 +254,26 @@ export async function convertScene(
 				if (line === paint) return
 				// One shape is enough when the fill is the outline colour's own tint.
 				if (PAIRS.some(([light, dark]) => paint === light && line === dark) && e.fillStyle === 'solid')
-					return editor.updateShapes([{ id: sh.id, type: sh.type, props: { color: line } }])
+					return editor.updateShapes([{ id: sh.id, type: sh.type, props: { color: line } }] as never)
 				const siblings = editor.getSortedChildIdsForParent(sh.parentId)
 				const below = editor.getShape(siblings[siblings.indexOf(sh.id) - 1])?.index
 				const id = tl.createShapeId()
 				const { x, y, rotation, parentId, opacity, isLocked } = sh
 				const blank = sh.type === 'geo' ? { richText: tl.toRichText('') } : {}
-				editor.createShape({ id, type: sh.type, x, y, rotation, parentId, opacity, isLocked, index: tl.getIndexBetween(below, sh.index), props: { ...sh.props, ...blank, color: paint, dash: 'solid', size: 's', scale: 0.25 } } as any)
-				editor.updateShapes([{ id: sh.id, type: sh.type, props: { color: line, fill: 'none' } }])
+				editor.createShape({ id, type: sh.type, x, y, rotation, parentId, opacity, isLocked, index: tl.getIndexBetween(below, sh.index), props: { ...sh.props, ...blank, color: paint, dash: 'solid', size: 's', scale: 0.25 } } as never)
+				editor.updateShapes([{ id: sh.id, type: sh.type, props: { color: line, fill: 'none' } }] as never)
 				if (!String(parentId).startsWith('shape:')) editor.groupShapes([id, sh.id])
 			})
 
 			// The importer moves the drawing: find by how much from any unrotated shape.
 			const anchor = elements.findIndex((e, i) => !e.angle && shapeOf(i))
-			const at = anchor >= 0 ? editor.getShapePageTransform(shapeOf(anchor).id).point() : { x: 0, y: 0 }
+			const at = anchor >= 0 ? editor.getShapePageTransform(shapeOf(anchor)!.id).point() : { x: 0, y: 0 }
 			const [dx, dy] = anchor >= 0 ? [at.x - elements[anchor].x, at.y - elements[anchor].y] : [0, 0]
 			// tldraw's fonts set text a little wider or narrower: keep each text on its original centre line and aligned edge.
 			editor.updateShapes(elements.flatMap((e, i) => {
 				const sh = shapeOf(i)
 				if (sh?.type !== 'text') return []
-				const fix = fixes.find((f) => f.id === sh.id)
+				const fix = fixes.find((f) => f.id === sh.id)!
 				const b = editor.getShapePageBounds(sh.id)
 				// Without a layout engine (tests) text has no size: put it back where the importer placed it.
 				if (e.angle || !b || b.w < 2 || !(e.width > 0)) return [{ id: sh.id, type: 'text', x: fix.x, y: fix.y }]
@@ -250,10 +287,10 @@ export async function convertScene(
 					const id = tl.createShapeId()
 					editor.createShape({ id, type: 'frame', x: f.x + dx, y: f.y + dy, props: { w: f.width, h: f.height, name: f.name ?? '' } })
 					editor.sendToBack([id])
-					const kids = elements.flatMap((e, i) => (e.frameId === f.id && shapeOf(i) ? [shapeOf(i)] : []))
+					const kids = elements.flatMap((e, i) => (e.frameId === f.id && shapeOf(i) ? [shapeOf(i)!] : []))
 					// A grouped child moves with its outermost group.
-					const top = (k: any): string => (String(k.parentId).startsWith('shape:') ? top(editor.getShape(k.parentId)) : k.id)
-					editor.reparentShapes([...new Set(kids.map(top))] as any, id)
+					const top = (k: Sh): TLShapeId => (String(k.parentId).startsWith('shape:') ? top(editor.getShape(k.parentId) as unknown as Sh) : k.id)
+					editor.reparentShapes([...new Set(kids.map(top))], id)
 				}
 			} else frames.forEach(() => skip('frame'))
 			const strokes = editor.getCurrentPageShapes().filter((s) => s.type === 'draw')
@@ -270,7 +307,7 @@ export async function convertScene(
 					schema: editor.store.schema.serialize(),
 					records: editor.store.allRecords(),
 				})
-			),
+			) as TldrawFile,
 			converted: editor.getCurrentPageShapeIds().size,
 			skipped,
 		}

@@ -36,7 +36,8 @@ export class Picker extends Modal {
 		new Setting(contentEl).setName('Save the tldraw copies').addDropdown((d) =>
 			d.addOption('', 'Next to each original').addOption('folder', 'In one folder…').setValue(this.dest ? 'folder' : '').onChange((v) => {
 				this.dest = v ? this.dest || 'tldraw' : ''
-				v ? folderRow.settingEl.show() : folderRow.settingEl.hide()
+				if (v) folderRow.settingEl.show()
+				else folderRow.settingEl.hide()
 				folderText.setValue(this.dest)
 				this.render()
 			})
@@ -90,7 +91,8 @@ export class Picker extends Modal {
 				.setDesc(done ? `${f.parent?.path ?? ''} · already converted` : (f.parent?.path ?? ''))
 				.addToggle((t) =>
 					t.setValue(this.chosen.has(f.path) && !done).setDisabled(done).onChange((v) => {
-						v ? this.chosen.add(f.path) : this.chosen.delete(f.path)
+						if (v) this.chosen.add(f.path)
+						else this.chosen.delete(f.path)
 						this.count()
 					})
 				)
